@@ -44,6 +44,7 @@ export const INTERACT_KEYS = new Set(["e", " ", "Enter"]);
 export const SCENE = {
   GUILD: "guild",
   QUEST: "quest",
+  COMBAT: "combat",
 };
 
 // ─── PLAYER DEFAULTS ───

@@ -23,7 +23,7 @@ export async function generateQuest(systemPrompt, userMessage) {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "claude-haiku-4-5-20251001",
+      model: "claude-sonnet-4-5-20250929",
       max_tokens: 600,
       temperature: 0.9,
       system: systemPrompt,
@@ -64,4 +64,35 @@ export async function generateQuestZone(quest) {
   }
 
   return data;
+}
+
+/**
+ * Get AI combat narration
+ */
+export async function getCombatNarration(systemPrompt, userMessage) {
+  const response = await fetch("/api/combat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ system: systemPrompt, message: userMessage }),
+  });
+
+  return await response.json();
+}
+
+/**
+ * Generate a monster portrait via GPT Image 1
+ */
+export async function generateMonsterPortrait(monsterName, monsterDescription, biome) {
+  try {
+    const response = await fetch("/api/monster-image", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ monsterName, monsterDescription, biome }),
+    });
+
+    const data = await response.json();
+    return data.url || null;
+  } catch {
+    return null;
+  }
 }

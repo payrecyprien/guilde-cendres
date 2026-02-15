@@ -12,7 +12,7 @@ import { DIRECTIONS, KEY_MAP, INTERACT_KEYS } from "../data/constants";
  * @param {Function} params.onDialogueClose - close dialogue on Escape
  * @param {Object}   params.dialogueStep - current dialogue step (for choice handling)
  * @param {Function} params.onChoice - (action) => void for choice buttons
- * @param {Object}   params.initialPos - { x, y }
+ * @param {boolean}  params.disabled - blocks all input when true
  * @param {string}   params.initialFacing - "up"|"down"|"left"|"right"
  */
 export default function useMovement({
@@ -23,6 +23,7 @@ export default function useMovement({
   onDialogueClose,
   dialogueStep,
   onChoice,
+  disabled = false,
   initialPos = { x: 6, y: 7 },
   initialFacing = "up",
 }) {
@@ -37,6 +38,8 @@ export default function useMovement({
 
   const handleKeyDown = useCallback(
     (e) => {
+      if (disabled) return;
+
       // ─── DIALOGUE MODE ───
       if (dialogueOpen) {
         if (INTERACT_KEYS.has(e.key)) {
@@ -76,7 +79,7 @@ export default function useMovement({
         onInteract?.();
       }
     },
-    [dialogueOpen, dialogueStep, isWalkable, onInteract, onDialogueAdvance, onDialogueClose, onChoice]
+    [disabled, dialogueOpen, dialogueStep, isWalkable, onInteract, onDialogueAdvance, onDialogueClose, onChoice]
   );
 
   useEffect(() => {

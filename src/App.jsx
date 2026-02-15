@@ -8,8 +8,10 @@ import { QUEST_SYSTEM_PROMPT, buildQuestUserMessage, ARMORER_ITEMS } from "./dat
 import { generateQuest, generateQuestZone } from "./utils/api";
 import useDialogue from "./hooks/useDialogue";
 import useMovement from "./hooks/useMovement";
+import useCombat from "./hooks/useCombat";
 import GuildScene from "./scenes/GuildScene";
 import QuestScene from "./scenes/QuestScene";
+import CombatScene from "./scenes/CombatScene";
 import PlayerSprite from "./components/PlayerSprite";
 import DialogueBox from "./components/DialogueBox";
 import HUD from "./components/HUD";
@@ -39,17 +41,18 @@ export default function App() {
 
   const gameRef = useRef(null);
   const isGenerating = useRef(false);
+  const combatTargetRef = useRef(null);
 
   // ─── DERIVED: is the objective reachable? ───
   const objectiveUnlocked = (() => {
     if (!activeQuest) return false;
-    // Any quest with monsters: must kill them all
     if (zoneMonsters.length > 0) return false;
     return true;
   })();
 
   // ─── HOOKS ───
   const dialogue = useDialogue();
+  const combat = useCombat();
 
   // Helpers
   const getNPCAt = useCallback(
@@ -254,26 +257,83 @@ export default function App() {
   }, [activeQuest, objectiveUnlocked, zoneMonsters.length, dialogue]);
 
   const encounterMonster = useCallback((monster) => {
-    const playerDmg = Math.max(1, player.atk - monster.def);
-    const monsterDmg = Math.max(1, monster.atk - player.def);
-    const turnsToKill = Math.ceil(monster.hp / playerDmg);
-    const damageTaken = monsterDmg * (turnsToKill - 1);
+    combatTargetRef.current = monster;
+    combat.startCombat(monster, zoneBiome?.name);
+    setScene(SCENE.COMBAT);
+  }, [combat, zoneBiome]);
 
-    dialogue.open([
-      {
-        type: "text", speaker: monster.name, speakerColor: "#c0392b",
-        text: `${monster.description || "Une créature hostile !"} (PV: ${monster.hp}, ATK: ${monster.atk}, DEF: ${monster.def})`,
-      },
-      {
-        type: "choice", speaker: "— Combat —", speakerColor: "#c0392b",
-        text: `Tu peux vaincre ${monster.name} en ~${turnsToKill} coups, mais tu prendras ~${damageTaken} dégâts.`,
-        choices: [
-          { label: `⚔ Attaquer (≈-${damageTaken} PV)`, action: `fight_${monster.x}_${monster.y}`, style: "choice-accept" },
-          { label: "🏃 Reculer", action: "cancel", style: "choice-decline" },
-        ],
-      },
-    ]);
-  }, [player, dialogue]);
+  // ═══════════════════════════════════════════
+  // COMBAT HANDLERS
+  // ═══════════════════════════════════════════
+
+  const handleCombatAction = useCallback(async (action) => {
+    let effectivePlayer = { ...player };
+
+    if (action === "potion") {
+      if (player.hp >= player.maxHp) return;
+      // Heal 30 HP before combat resolution
+      effectivePlayer.hp = Math.min(player.maxHp, player.hp + 30);
+      setPlayer((prev) => ({ ...prev, hp: Math.min(prev.maxHp, prev.hp + 30) }));
+      // Treated as defend (monster still attacks but reduced damage)
+      const result = await combat.executeAction("defend", effectivePlayer, zoneBiome?.name);
+      if (result) {
+        setPlayer((prev) => ({ ...prev, hp: result.newPlayerHp }));
+      }
+      return;
+    }
+
+    const result = await combat.executeAction(action, effectivePlayer, zoneBiome?.name);
+    if (result) {
+      setPlayer((prev) => ({ ...prev, hp: result.newPlayerHp }));
+    }
+  }, [combat, player, zoneBiome]);
+
+  const handleCombatEnd = useCallback(() => {
+    const target = combatTargetRef.current;
+
+    if (combat.phase === "victory" && target) {
+      // Remove monster from zone
+      setZoneMonsters((prev) => prev.filter((m) => !(m.x === target.x && m.y === target.y)));
+      // Give loot
+      if (combat.loot) {
+        setPlayer((prev) => ({
+          ...prev,
+          gold: prev.gold + combat.loot.gold,
+          xp: prev.xp + combat.loot.xp,
+        }));
+      }
+      setScene(SCENE.QUEST);
+    } else if (combat.phase === "defeat") {
+      setActiveQuest(null);
+      returnToGuild(true);
+    } else if (combat.phase === "fled") {
+      setScene(SCENE.QUEST);
+    }
+
+    combatTargetRef.current = null;
+  }, [combat.phase, combat.loot, returnToGuild]);
+
+  // ─── COMBAT KEYBOARD ───
+  useEffect(() => {
+    if (scene !== SCENE.COMBAT) return;
+
+    const handler = (e) => {
+      if (combat.phase === "choose") {
+        if (e.key === "1") handleCombatAction("attack");
+        else if (e.key === "2") handleCombatAction("defend");
+        else if (e.key === "3") handleCombatAction("potion");
+        else if (e.key === "4") handleCombatAction("flee");
+      }
+      if ((combat.phase === "victory" || combat.phase === "defeat" || combat.phase === "fled") &&
+          (e.key === "e" || e.key === " " || e.key === "Enter")) {
+        e.preventDefault();
+        handleCombatEnd();
+      }
+    };
+
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [scene, combat.phase, handleCombatAction, handleCombatEnd]);
 
   // ═══════════════════════════════════════════
   // INTERACTION ROUTER
@@ -367,44 +427,6 @@ export default function App() {
       return;
     }
 
-    // ─── Combat ───
-    if (action.startsWith("fight_")) {
-      const parts = action.split("_");
-      const mx = Number(parts[1]);
-      const my = Number(parts[2]);
-      const monster = zoneMonsters.find((m) => m.x === mx && m.y === my);
-      if (!monster) { dialogue.close(); return; }
-
-      const playerDmg = Math.max(1, player.atk - monster.def);
-      const monsterDmg = Math.max(1, monster.atk - player.def);
-      const turnsToKill = Math.ceil(monster.hp / playerDmg);
-      const damageTaken = monsterDmg * (turnsToKill - 1);
-      const newHp = Math.max(0, player.hp - damageTaken);
-
-      setPlayer((prev) => ({ ...prev, hp: newHp }));
-      setZoneMonsters((prev) => prev.filter((m) => !(m.x === mx && m.y === my)));
-
-      if (newHp <= 0) {
-        dialogue.close();
-        dialogue.open([
-          { type: "text", speaker: "— Défaite —", speakerColor: "#c0392b", text: `${monster.name} t'a vaincu. Tu te réveilles à la guilde.` },
-          { type: "choice", speaker: "— Système —", speakerColor: "#5a4a35", text: "Mission échouée.",
-            choices: [{ label: "Retour à la guilde", action: "death_return", style: "choice-decline" }],
-          },
-        ]);
-      } else {
-        dialogue.close();
-        dialogue.open([{
-          type: "text", speaker: "— Victoire —", speakerColor: "#6a9f4a",
-          text: `${monster.name} vaincu ! +${monster.xp || 10} XP, +${monster.gold || 5} or. (PV: ${newHp})`,
-        }]);
-        setPlayer((prev) => ({
-          ...prev, gold: prev.gold + (monster.gold || 5), xp: prev.xp + (monster.xp || 10),
-        }));
-      }
-      return;
-    }
-
     // ─── Return / Complete ───
     if (action === "return_guild") {
       returnToGuild();
@@ -457,6 +479,7 @@ export default function App() {
     onDialogueClose: dialogue.close,
     dialogueStep: dialogue.currentStep,
     onChoice: handleChoice,
+    disabled: scene === SCENE.COMBAT,
     initialPos: { ...GUILD_START },
     initialFacing: "up",
   });
@@ -511,46 +534,62 @@ export default function App() {
     >
       <div className="game-header">
         <div className="game-title">
-          {scene === SCENE.GUILD ? "GUILDE DES CENDRES" : (zoneBiome?.name || "ZONE DE QUÊTE").toUpperCase()}
+          {scene === SCENE.GUILD ? "GUILDE DES CENDRES"
+            : scene === SCENE.COMBAT ? "⚔ COMBAT"
+            : (zoneBiome?.name || "ZONE DE QUÊTE").toUpperCase()}
         </div>
         <div className="game-subtitle">
-          {scene === SCENE.GUILD ? "Mercenaires de Cendrebourg" : activeQuest?.title || "Exploration"}
+          {scene === SCENE.GUILD ? "Mercenaires de Cendrebourg"
+            : scene === SCENE.COMBAT ? combat.monster?.name || "Combat"
+            : activeQuest?.title || "Exploration"}
         </div>
       </div>
 
-      <div className="game-viewport" style={{ width: mapW, height: mapH }}>
-        {scene === SCENE.GUILD && <GuildScene highlightedNPC={highlightedNPC} />}
-        {scene === SCENE.QUEST && (
-          <QuestScene
-            zoneData={zoneData}
-            zoneBiome={zoneBiome}
-            monsters={zoneMonsters}
-            highlightedMonster={highlightedMonster}
-            playerPos={movement.pos}
-            objectiveUnlocked={objectiveUnlocked}
-          />
-        )}
+      {/* COMBAT SCENE — full replacement */}
+      {scene === SCENE.COMBAT ? (
+        <CombatScene
+          combat={combat}
+          player={player}
+          onAction={handleCombatAction}
+          onEnd={handleCombatEnd}
+          zoneBiome={zoneBiome}
+        />
+      ) : (
+        /* EXPLORATION SCENES (guild + quest) */
+        <div className="game-viewport" style={{ width: mapW, height: mapH }}>
+          {scene === SCENE.GUILD && <GuildScene highlightedNPC={highlightedNPC} />}
+          {scene === SCENE.QUEST && (
+            <QuestScene
+              zoneData={zoneData}
+              zoneBiome={zoneBiome}
+              monsters={zoneMonsters}
+              highlightedMonster={highlightedMonster}
+              playerPos={movement.pos}
+              objectiveUnlocked={objectiveUnlocked}
+            />
+          )}
 
-        <PlayerSprite pos={movement.pos} facing={movement.facing} />
+          <PlayerSprite pos={movement.pos} facing={movement.facing} />
 
-        {showHint && !dialogue.isOpen && (
-          <div className="interact-hint" style={{
-            left: movement.pos.x * TILE_SIZE + TILE_SIZE / 2,
-            top: movement.pos.y * TILE_SIZE - 20,
-          }}>
-            [E] {showHint}
-          </div>
-        )}
+          {showHint && !dialogue.isOpen && (
+            <div className="interact-hint" style={{
+              left: movement.pos.x * TILE_SIZE + TILE_SIZE / 2,
+              top: movement.pos.y * TILE_SIZE - 20,
+            }}>
+              [E] {showHint}
+            </div>
+          )}
 
-        {dialogue.isOpen && (
-          <DialogueBox
-            step={dialogue.currentStep}
-            onAdvance={dialogue.advance}
-            onChoice={handleChoice}
-            onClose={dialogue.close}
-          />
-        )}
-      </div>
+          {dialogue.isOpen && (
+            <DialogueBox
+              step={dialogue.currentStep}
+              onAdvance={dialogue.advance}
+              onChoice={handleChoice}
+              onClose={dialogue.close}
+            />
+          )}
+        </div>
+      )}
 
       <HUD player={player} activeQuest={activeQuest} />
     </div>

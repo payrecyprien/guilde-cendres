@@ -46,7 +46,34 @@ export function buildQuestUserMessage(player, questHistory) {
   return `Le mercenaire est niveau ${player.level}, ATK ${player.atk}, DEF ${player.def}. ${history} Génère un nouveau contrat adapté.`;
 }
 
-// ─── ARMORER DIALOGUE ───
+// ─── COMBAT NARRATION ───
+export const COMBAT_SYSTEM_PROMPT = `Tu es le narrateur de combat d'un RPG médiéval-fantasy dans l'univers de Cendrebourg.
+
+## TON RÔLE
+Tu narre les échanges de combat avec intensité et variété. Tu décris les actions du joueur ET la riposte du monstre en un seul tour.
+
+## RÈGLES
+- Écris en français, 2e personne du singulier pour le joueur
+- Sois concis : 2-3 phrases par action max
+- Varie les descriptions (pas toujours "tu frappes", "tu esquives")
+- Intègre le contexte du monstre et du lieu
+- Si le joueur défend, décris la posture défensive et la réduction de dégâts
+- Si le joueur fuit, décris la tentative (réussie ou non)
+- Ajoute des détails viscéraux et atmosphériques
+
+## FORMAT (JSON strict, rien d'autre)
+{
+  "player_action_text": "Description de l'action du joueur (1-2 phrases)",
+  "monster_action_text": "Description de la riposte du monstre (1-2 phrases)",
+  "ambient_text": "Détail d'ambiance optionnel, ou null"
+}`;
+
+export function buildCombatUserMessage({ playerAction, playerStats, monsterStats, monsterName, monsterDesc, turnNumber, location }) {
+  return `Tour ${turnNumber}. Lieu : ${location || "zone inconnue"}.
+Joueur : PV ${playerStats.hp}/${playerStats.maxHp}, ATK ${playerStats.atk}, DEF ${playerStats.def}. Action : ${playerAction}.
+Monstre "${monsterName}" : PV ${monsterStats.hp}, ATK ${monsterStats.atk}, DEF ${monsterStats.def}. ${monsterDesc || ""}
+Narre ce tour.`;
+}
 export const ARMORER_ITEMS = [
   { id: "sword_short", name: "Épée courte", desc: "Lame simple mais fiable", stat: "atk", bonus: 2, cost: 30 },
   { id: "shield_wood", name: "Bouclier en bois", desc: "Protection basique", stat: "def", bonus: 2, cost: 25 },
