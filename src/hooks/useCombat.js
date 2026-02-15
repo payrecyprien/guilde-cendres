@@ -63,22 +63,19 @@ export default function useCombat() {
 
     switch (action) {
       case "attack":
-        playerDmg = Math.max(1, Math.round((playerStats.atk - monster.def) * variance()));
-        monsterDmg = Math.max(1, Math.round((monster.atk - playerStats.def) * variance()));
+        playerDmg = Math.max(2, Math.round((playerStats.atk - monster.def) * 2 * variance()));
+        monsterDmg = Math.max(1, Math.round((monster.atk - playerStats.def) * 2 * variance()));
         break;
 
       case "defend":
         playerDefending = true;
-        // Half damage taken
         monsterDmg = Math.max(0, Math.round((monster.atk - playerStats.def * 1.5) * variance()));
         break;
 
       case "flee":
-        // 50% chance + higher if player faster
         fled = Math.random() < 0.5 + (playerStats.def > monster.atk ? 0.2 : -0.1);
         if (!fled) {
-          // Failed flee: monster gets free hit
-          monsterDmg = Math.max(1, Math.round((monster.atk - playerStats.def * 0.5) * variance()));
+          monsterDmg = Math.max(1, Math.round((monster.atk - playerStats.def * 0.5) * 2 * variance()));
         }
         break;
     }
