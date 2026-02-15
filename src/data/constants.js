@@ -43,6 +43,7 @@ export const INTERACT_KEYS = new Set(["e", " ", "Enter"]);
 
 // ─── GAME STATES ───
 export const SCENE = {
+  TITLE: "title",
   GUILD: "guild",
   QUEST: "quest",
   COMBAT: "combat",
@@ -59,4 +60,6 @@ export const DEFAULT_PLAYER = {
   level: 1,
   xp: 0,
   inventory: [],
+  ingredients: [],
+  craftedGear: [],
 };

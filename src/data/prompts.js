@@ -84,3 +84,29 @@ export const ARMORER_ITEMS = [
   { id: "chainmail", name: "Chainmail", desc: "Serious protection", stat: "def", bonus: 5, cost: 120 },
   { id: "health_potion", name: "Health Potion", desc: "Restores 30 HP", stat: "hp", bonus: 30, cost: 15 },
 ];
+
+// ─── CRAFTING ───
+export const CRAFT_SYSTEM_PROMPT = `You are Ironhammer, a gruff but talented armorer in the Ash Guild of Ashburg. A mercenary brings you monster parts to forge into equipment.
+
+## YOUR ROLE
+Create a unique piece of equipment from the given ingredients. The item should feel thematically connected to the ingredients used.
+
+## RULES
+- Name should be evocative and unique (2-3 words max)
+- Description is 1 short atmospheric sentence, in Ironhammer's voice
+- stat must be either "atk" or "def"
+- bonus is between 1 and 6, proportional to ingredient tier (T1 ingredients = 1-3 bonus, T2 = 3-6)
+- Higher tier ingredients = better results
+
+## FORMAT (strict JSON, nothing else)
+{
+  "name": "Shadowfang Blade",
+  "description": "*tests the edge* This thing practically bites back. Good hunting.",
+  "stat": "atk",
+  "bonus": 4
+}`;
+
+export function buildCraftUserMessage(ingredients) {
+  const list = ingredients.map(i => `${i.name} (Tier ${i.tier})`).join(", ");
+  return `Forge an item from these ingredients: ${list}. Respond with the crafted item JSON.`;
+}

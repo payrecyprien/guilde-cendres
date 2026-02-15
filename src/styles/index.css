@@ -630,6 +630,20 @@ body {
   letter-spacing: 0.5px;
 }
 
+.hud-materials {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 16px;
+  background: rgba(15, 12, 8, 0.8);
+  border: 1px solid rgba(139, 105, 20, 0.2);
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.hud-mat-label { font-size: 12px; margin-right: 4px; }
+.hud-mat-icon { font-size: 14px; }
+
 .hud-controls {
   padding: 10px 16px;
   background: rgba(15, 12, 8, 0.8);
@@ -771,6 +785,266 @@ body {
   50% { transform: rotate(0deg) scale(1); }
   75% { transform: rotate(-5deg) scale(1.05); }
   100% { transform: rotate(0deg) scale(1); }
+}
+
+/* ─── TITLE SCREEN ─── */
+.title-container {
+  position: relative;
+  width: 700px;
+  height: 500px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(ellipse at 50% 40%, #1a1510 0%, #0d0a07 70%);
+  border: 3px solid #2a2318;
+  border-radius: 4px;
+  overflow: hidden;
+  cursor: pointer;
+  user-select: none;
+}
+
+.title-particles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.title-particle {
+  position: absolute;
+  bottom: -10px;
+  width: 2px;
+  height: 2px;
+  background: #d4a856;
+  border-radius: 50%;
+  animation: particleRise linear infinite;
+}
+
+@keyframes particleRise {
+  0% { transform: translateY(0); opacity: 0; }
+  15% { opacity: 0.4; }
+  85% { opacity: 0.2; }
+  100% { transform: translateY(-500px); opacity: 0; }
+}
+
+.title-emblem {
+  font-size: 40px;
+  margin-bottom: 8px;
+  filter: drop-shadow(0 0 12px rgba(212, 168, 86, 0.4));
+  animation: emblemPulse 3s ease-in-out infinite;
+}
+
+@keyframes emblemPulse {
+  0%, 100% { filter: drop-shadow(0 0 12px rgba(212, 168, 86, 0.3)); }
+  50% { filter: drop-shadow(0 0 20px rgba(212, 168, 86, 0.6)); }
+}
+
+.title-main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 0 0 4px;
+  line-height: 1;
+}
+
+.title-the {
+  font-family: "Crimson Text", Georgia, serif;
+  font-size: 16px;
+  font-weight: 400;
+  color: #6b5a42;
+  letter-spacing: 6px;
+  text-transform: uppercase;
+}
+
+.title-name {
+  font-family: "Cinzel", serif;
+  font-size: 42px;
+  font-weight: 700;
+  color: #d4a856;
+  letter-spacing: 4px;
+  text-shadow: 0 2px 15px rgba(212, 168, 86, 0.3);
+}
+
+.title-location {
+  font-family: "Crimson Text", Georgia, serif;
+  font-size: 14px;
+  color: #5a4a35;
+  letter-spacing: 3px;
+  margin-bottom: 24px;
+}
+
+.title-subtitle {
+  font-family: "Crimson Text", Georgia, serif;
+  font-size: 13px;
+  color: #8a7a62;
+  max-width: 480px;
+  text-align: center;
+  line-height: 1.6;
+  margin: 0 0 20px;
+  min-height: 42px;
+}
+
+.title-cursor {
+  color: #d4a856;
+  animation: cursorBlink 0.6s step-end infinite;
+}
+
+@keyframes cursorBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.title-tags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 24px;
+  max-width: 520px;
+}
+
+.title-tag {
+  font-family: "Segoe UI", sans-serif;
+  font-size: 10px;
+  color: #6b5a42;
+  background: rgba(212, 168, 86, 0.06);
+  border: 1px solid rgba(212, 168, 86, 0.15);
+  border-radius: 3px;
+  padding: 4px 10px;
+  letter-spacing: 0.3px;
+  animation: tagFadeIn 0.4s ease-out both;
+}
+
+@keyframes tagFadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.title-prompt {
+  font-family: "Cinzel", serif;
+  font-size: 14px;
+  color: #d4a856;
+  letter-spacing: 1px;
+  transition: opacity 0.4s;
+}
+
+.title-prompt.prompt-dim { opacity: 0.4; }
+
+.title-credits {
+  position: absolute;
+  bottom: 14px;
+  font-family: "Crimson Text", Georgia, serif;
+  font-size: 11px;
+  color: #3a3225;
+  letter-spacing: 0.5px;
+}
+
+/* ─── JOURNAL PANEL ─── */
+.journal-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(8, 6, 4, 0.92);
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.journal-panel {
+  width: 580px;
+  max-height: 420px;
+  background: linear-gradient(180deg, #1a1510 0%, #12100c 100%);
+  border: 2px solid #2a2318;
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.journal-header {
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid #2a2318;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.journal-title {
+  font-family: "Cinzel", serif;
+  font-size: 16px;
+  font-weight: 700;
+  color: #d4a856;
+  letter-spacing: 1px;
+}
+
+.journal-close {
+  font-size: 11px;
+  color: #5a4a35;
+}
+
+.journal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 20px;
+  scrollbar-width: thin;
+  scrollbar-color: #2a2318 transparent;
+}
+
+.journal-empty {
+  color: #4a3d2e;
+  font-style: italic;
+  font-family: "Crimson Text", Georgia, serif;
+  font-size: 13px;
+  text-align: center;
+  padding: 40px 0;
+}
+
+.journal-entry {
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(42, 35, 24, 0.4);
+}
+
+.journal-entry:last-child { border-bottom: none; }
+
+.journal-entry-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 6px;
+}
+
+.journal-entry-title {
+  font-family: "Cinzel", serif;
+  font-size: 13px;
+  font-weight: 700;
+  color: #c8b88a;
+}
+
+.journal-entry-reward {
+  font-size: 10px;
+  color: #5a4a35;
+}
+
+.journal-entry-reward .j-gold { color: #d4a856; }
+.journal-entry-reward .j-xp { color: #6fa0e0; }
+
+.journal-entry-desc {
+  font-family: "Crimson Text", Georgia, serif;
+  font-size: 12px;
+  color: #6b5a42;
+  line-height: 1.5;
+}
+
+.journal-entry-location {
+  font-size: 10px;
+  color: #4a3d2e;
+  margin-top: 4px;
 }
 
 /* ─── ANIMATIONS ─── */

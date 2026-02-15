@@ -5,16 +5,19 @@ import {
 } from "./data/constants";
 import { GUILD_MAP, GUILD_START, NPCS } from "./data/guild";
 import { ZT, ZONE_WALKABLE, getBiomeStyle } from "./data/zones";
-import { QUEST_SYSTEM_PROMPT, buildQuestUserMessage, ARMORER_ITEMS } from "./data/prompts";
-import { generateQuest, generateQuestZone } from "./utils/api";
+import { QUEST_SYSTEM_PROMPT, buildQuestUserMessage, ARMORER_ITEMS, CRAFT_SYSTEM_PROMPT, buildCraftUserMessage } from "./data/prompts";
+import { INGREDIENTS, rollDrop, MAX_CRAFTED_SLOTS } from "./data/crafting";
+import { generateQuest, generateQuestZone, craftItem } from "./utils/api";
 import useDialogue from "./hooks/useDialogue";
 import useCombat from "./hooks/useCombat";
 import useKeyboard from "./hooks/useKeyboard";
+import TitleScene from "./scenes/TitleScene";
 import GuildScene from "./scenes/GuildScene";
 import QuestScene from "./scenes/QuestScene";
 import CombatScene from "./scenes/CombatScene";
 import PlayerSprite from "./components/PlayerSprite";
 import DialogueBox from "./components/DialogueBox";
+import JournalPanel from "./components/JournalPanel";
 import HUD from "./components/HUD";
 
 const GUILD_W = GUILD_MAP[0].length;
@@ -24,13 +27,15 @@ const ZONE_H = 10;
 
 export default function App() {
   // ─── ALL STATE IN COMPONENT ───
-  const [scene, setScene] = useState(SCENE.GUILD);
+  const [scene, setScene] = useState(SCENE.TITLE);
   const [player, setPlayer] = useState({ ...DEFAULT_PLAYER });
   const [playerPos, setPlayerPos] = useState({ ...GUILD_START });
   const [facing, setFacing] = useState("up");
   const [activeQuest, setActiveQuest] = useState(null);
   const [questHistory, setQuestHistory] = useState([]);
   const [pendingQuest, setPendingQuest] = useState(null);
+  const [journalOpen, setJournalOpen] = useState(false);
+  const [lastQuestResult, setLastQuestResult] = useState(null); // tracks return context
 
   const [zoneData, setZoneData] = useState(null);
   const [zoneMonsters, setZoneMonsters] = useState([]);
@@ -79,6 +84,32 @@ export default function App() {
     return { x: pos.x + dx, y: pos.y + dy };
   };
 
+  // ─── CONTEXTUAL NPC DIALOGUE ───
+  const getVarekGreeting = useCallback(() => {
+    // React to quest return
+    if (lastQuestResult === "victory") {
+      const hpRatio = player.hp / player.maxHp;
+      if (hpRatio >= 0.9) return "Not a scratch on you. Impressive work out there.";
+      if (hpRatio >= 0.5) return "You look like you've seen some action. Good. That means you're still standing.";
+      return "You look roughed up. Get yourself patched before the next contract.";
+    }
+    if (lastQuestResult === "defeat") {
+      return "Back already? Don't beat yourself up — even the best take a hit sometimes. Dust off and try again.";
+    }
+    // Level-based
+    if (player.level >= 5) return "Our finest blade. What'll it be, veteran?";
+    if (player.level >= 3) return "You're making a name for yourself. The board's got fresh contracts.";
+    if (questHistory.length > 0) return "Ready for another run? Let's see what's on the board.";
+    return "Welcome to the Ash Guild, mercenary. I've got work if you've got the nerve.";
+  }, [lastQuestResult, player.hp, player.maxHp, player.level, questHistory.length]);
+
+  const getIronhammerGreeting = useCallback(() => {
+    if (player.hp < player.maxHp * 0.4) return "*eyes your wounds* You need a potion before anything else, friend.";
+    if (player.inventory.length >= 4) return "*nods approvingly* You're well-equipped. But there's always room for an upgrade.";
+    if (player.level >= 3) return "*polishes a blade* I've got some serious gear for someone of your caliber.";
+    return "*strikes the anvil* What do you need?";
+  }, [player.hp, player.maxHp, player.inventory.length, player.level]);
+
   // ═══════════════════════════════════════════
   // GUILD INTERACTIONS
   // ═══════════════════════════════════════════
@@ -92,10 +123,12 @@ export default function App() {
       return;
     }
 
-    dialogue.open([{
-      type: "loading", speaker: "Commander Varek",
-      text: "Varek checks the contract board...",
-    }]);
+    setLastQuestResult(null);
+
+    dialogue.open([
+      { type: "text", speaker: "Commander Varek", text: getVarekGreeting() },
+      { type: "loading", speaker: "Commander Varek", text: "Varek checks the contract board..." },
+    ]);
 
     if (isGenerating.current) return;
     isGenerating.current = true;
@@ -124,33 +157,53 @@ export default function App() {
       }]);
     }
     isGenerating.current = false;
-  }, [activeQuest, player, questHistory, dialogue]);
+  }, [activeQuest, player, questHistory, dialogue, getVarekGreeting]);
 
   const talkToArmorer = useCallback(() => {
+    const steps = [
+      { type: "text", speaker: "Ironhammer", text: getIronhammerGreeting() },
+    ];
+
+    const choices = [];
+
+    // Shop items
     const available = ARMORER_ITEMS.filter((item) =>
       item.id === "health_potion" || !player.inventory.includes(item.id)
     );
+    available.slice(0, 3).forEach((item) => {
+      choices.push({
+        label: `${item.name} — ${item.cost} gold (${item.stat === "hp" ? `+${item.bonus} HP` : `+${item.bonus} ${item.stat.toUpperCase()}`})`,
+        action: `buy_${item.id}`,
+        style: player.gold >= item.cost ? "choice-accept" : "choice-disabled",
+      });
+    });
 
-    if (available.length === 0) {
-      dialogue.open([{
-        type: "text", speaker: "Ironhammer",
-        text: "*looks at empty stock* You already have everything. Come back when I have new gear.",
-      }]);
-      return;
+    // Craft option (need 2+ ingredients, max slots not reached)
+    if (player.ingredients.length >= 2 && player.craftedGear.length < MAX_CRAFTED_SLOTS) {
+      const ingIcons = player.ingredients.slice(0, 4).map(id => INGREDIENTS[id]?.icon || "?").join("");
+      choices.push({
+        label: `🔨 Forge (${player.ingredients.length} materials: ${ingIcons})`,
+        action: "craft_start",
+        style: "choice-accept",
+      });
+    } else if (player.ingredients.length > 0 && player.ingredients.length < 2) {
+      choices.push({
+        label: `🔨 Forge (need 2 materials, have ${player.ingredients.length})`,
+        action: "noop",
+        style: "choice-disabled",
+      });
     }
 
-    const choices = available.slice(0, 3).map((item) => ({
-      label: `${item.name} — ${item.cost} gold (${item.stat === "hp" ? `+${item.bonus} HP` : `+${item.bonus} ${item.stat.toUpperCase()}`})`,
-      action: `buy_${item.id}`,
-      style: player.gold >= item.cost ? "choice-accept" : "choice-disabled",
-    }));
     choices.push({ label: "Nothing for now", action: "leave_shop", style: "choice-decline" });
 
-    dialogue.open([
-      { type: "text", speaker: "Ironhammer", text: "*strikes the anvil* What do you need?" },
-      { type: "choice", speaker: "Ironhammer", text: `You have ${player.gold} gold.`, choices },
-    ]);
-  }, [player, dialogue]);
+    steps.push({
+      type: "choice", speaker: "Ironhammer",
+      text: `You have ${player.gold} gold.${player.ingredients.length > 0 ? ` Materials: ${player.ingredients.map(id => INGREDIENTS[id]?.icon || "?").join(" ")}` : ""}`,
+      choices,
+    });
+
+    dialogue.open(steps);
+  }, [player, dialogue, getIronhammerGreeting]);
 
   const interactDoor = useCallback(async () => {
     if (!activeQuest) {
@@ -210,11 +263,19 @@ export default function App() {
   }, [activeQuest, dialogue]);
 
   const interactChest = useCallback(() => {
-    const invText = player.inventory.length > 0
-      ? `Equipment: ${player.inventory.map(id => ARMORER_ITEMS.find(i => i.id === id)?.name || id).join(", ")}.`
-      : "The chest is empty.";
-    dialogue.open([{ type: "text", speaker: "Chest", speakerColor: "#8b7355", text: invText }]);
-  }, [player.inventory, dialogue]);
+    const lines = [];
+    if (player.inventory.length > 0) {
+      lines.push(`Shop gear: ${player.inventory.map(id => ARMORER_ITEMS.find(i => i.id === id)?.name || id).join(", ")}`);
+    }
+    if (player.craftedGear.length > 0) {
+      lines.push(`Forged: ${player.craftedGear.map(g => `${g.name} (+${g.bonus} ${g.stat.toUpperCase()})`).join(", ")}`);
+    }
+    if (player.ingredients.length > 0) {
+      lines.push(`Materials: ${player.ingredients.map(id => `${INGREDIENTS[id]?.icon || "?"} ${INGREDIENTS[id]?.name || id}`).join(", ")}`);
+    }
+    const text = lines.length > 0 ? lines.join(" · ") : "The chest is empty.";
+    dialogue.open([{ type: "text", speaker: "Chest", speakerColor: "#8b7355", text }]);
+  }, [player.inventory, player.craftedGear, player.ingredients, dialogue]);
 
   // ═══════════════════════════════════════════
   // QUEST ZONE INTERACTIONS
@@ -305,6 +366,8 @@ export default function App() {
 
     if (combat.phase === "victory" && target) {
       setZoneMonsters((prev) => prev.filter((m) => !(m.x === target.x && m.y === target.y)));
+
+      // Loot: gold + xp
       if (combat.loot) {
         setPlayer((prev) => ({
           ...prev,
@@ -312,16 +375,37 @@ export default function App() {
           xp: prev.xp + combat.loot.xp,
         }));
       }
-      setScene(SCENE.QUEST);
+
+      // Ingredient drop
+      const biomeKey = activeQuest?.location || "gloomhaze";
+      const dropId = rollDrop(biomeKey);
+      if (dropId && INGREDIENTS[dropId]) {
+        const ing = INGREDIENTS[dropId];
+        setPlayer((prev) => ({
+          ...prev,
+          ingredients: [...prev.ingredients, dropId],
+        }));
+        // Show drop after returning to quest
+        setScene(SCENE.QUEST);
+        setTimeout(() => {
+          dialogue.open([{
+            type: "text", speaker: "— Loot —", speakerColor: "#d4a856",
+            text: `${ing.icon} Found: ${ing.name}! Bring it to Ironhammer to forge equipment.`,
+          }]);
+        }, 200);
+      } else {
+        setScene(SCENE.QUEST);
+      }
     } else if (combat.phase === "defeat") {
       setActiveQuest(null);
+      setLastQuestResult("defeat");
       returnToGuild(true);
     } else if (combat.phase === "fled") {
       setScene(SCENE.QUEST);
     }
 
     combatTargetRef.current = null;
-  }, [combat.phase, combat.loot, returnToGuild]);
+  }, [combat.phase, combat.loot, activeQuest, dialogue, returnToGuild]);
 
   // ═══════════════════════════════════════════
   // CHOICE HANDLER
@@ -392,6 +476,7 @@ export default function App() {
       setQuestHistory((prev) => [...prev, activeQuest]);
       const rewardCopy = activeQuest;
       setActiveQuest(null);
+      setLastQuestResult("victory");
       returnToGuild();
       setTimeout(() => {
         dialogue.open([{
@@ -403,16 +488,68 @@ export default function App() {
     }
     if (action === "death_return") {
       setActiveQuest(null);
+      setLastQuestResult("defeat");
       returnToGuild(true);
       return;
     }
 
-    if (action === "leave_shop" || action === "cancel") {
+    if (action === "leave_shop" || action === "cancel" || action === "noop") {
       dialogue.close();
     }
     if (action === "stay_zone") {
       dialogue.close();
       setPlayerPos((prev) => ({ x: prev.x, y: prev.y - 1 }));
+    }
+
+    // ─── CRAFTING ───
+    if (action === "craft_start") {
+      if (player.ingredients.length < 2) { dialogue.close(); return; }
+
+      // Take first 2 ingredients
+      const used = player.ingredients.slice(0, 2);
+      const usedData = used.map(id => INGREDIENTS[id]).filter(Boolean);
+      const icons = usedData.map(i => `${i.icon} ${i.name}`).join(" + ");
+
+      dialogue.close();
+      dialogue.open([{
+        type: "loading", speaker: "Ironhammer", speakerColor: "#8b6914",
+        text: `*heats the forge* Working with ${icons}...`,
+      }]);
+
+      // Remove used ingredients
+      setPlayer((prev) => {
+        const remaining = [...prev.ingredients];
+        remaining.splice(0, 2);
+        return { ...prev, ingredients: remaining };
+      });
+
+      // Call AI
+      (async () => {
+        try {
+          const item = await craftItem(
+            CRAFT_SYSTEM_PROMPT,
+            buildCraftUserMessage(usedData)
+          );
+
+          const craftedId = `crafted_${Date.now()}`;
+          setPlayer((prev) => ({
+            ...prev,
+            [item.stat === "atk" ? "atk" : "def"]: prev[item.stat] + item.bonus,
+            craftedGear: [...prev.craftedGear, { id: craftedId, ...item }],
+          }));
+
+          dialogue.replaceSteps([{
+            type: "text", speaker: "Ironhammer", speakerColor: "#8b6914",
+            text: `🔨 Forged: ${item.name} (+${item.bonus} ${item.stat.toUpperCase()})! ${item.description}`,
+          }]);
+        } catch (err) {
+          dialogue.replaceSteps([{
+            type: "text", speaker: "Ironhammer", speakerColor: "#c0392b",
+            text: `*curses* Something went wrong at the forge. Your materials are lost. [${err.message}]`,
+          }]);
+        }
+      })();
+      return;
     }
   }, [pendingQuest, player, activeQuest, zoneMonsters, dialogue, returnToGuild]);
 
@@ -422,6 +559,31 @@ export default function App() {
 
   // This runs every render, updating the ref with latest closure
   keyboardRef.current = (e) => {
+    // ─── TITLE SCREEN ───
+    if (scene === SCENE.TITLE) {
+      if (INTERACT_KEYS.has(e.key)) {
+        e.preventDefault();
+        setScene(SCENE.GUILD);
+      }
+      return;
+    }
+
+    // ─── JOURNAL TOGGLE ───
+    if (e.key === "j" || e.key === "J") {
+      if (scene === SCENE.GUILD || scene === SCENE.QUEST) {
+        e.preventDefault();
+        setJournalOpen((prev) => !prev);
+        return;
+      }
+    }
+    if (journalOpen) {
+      if (e.key === "Escape" || e.key === "j" || e.key === "J") {
+        e.preventDefault();
+        setJournalOpen(false);
+      }
+      return;
+    }
+
     // ─── COMBAT KEYS ───
     if (scene === SCENE.COMBAT) {
       if (combat.phase === "choose") {
@@ -543,64 +705,77 @@ export default function App() {
       tabIndex={0}
       onClick={() => gameRef.current?.focus()}
     >
-      <div className="game-header">
-        <div className="game-title">
-          {scene === SCENE.GUILD ? "ASH GUILD"
-            : scene === SCENE.COMBAT ? "⚔ COMBAT"
-            : (zoneBiome?.name || "QUEST ZONE").toUpperCase()}
-        </div>
-        <div className="game-subtitle">
-          {scene === SCENE.GUILD ? "Mercenaries of Ashburg"
-            : scene === SCENE.COMBAT ? combat.monster?.name || "Combat"
-            : activeQuest?.title || "Exploration"}
-        </div>
-      </div>
-
-      {scene === SCENE.COMBAT ? (
-        <CombatScene
-          combat={combat}
-          player={player}
-          onAction={handleCombatAction}
-          onEnd={handleCombatEnd}
-          zoneBiome={zoneBiome}
-        />
+      {scene === SCENE.TITLE ? (
+        <TitleScene onStart={() => setScene(SCENE.GUILD)} />
       ) : (
-        <div className="game-viewport" style={{ width: mapW, height: mapH }}>
-          {scene === SCENE.GUILD && <GuildScene highlightedNPC={highlightedNPC} />}
-          {scene === SCENE.QUEST && (
-            <QuestScene
-              zoneData={zoneData}
+        <>
+          <div className="game-header">
+            <div className="game-title">
+              {scene === SCENE.GUILD ? "ASH GUILD"
+                : scene === SCENE.COMBAT ? "⚔ COMBAT"
+                : (zoneBiome?.name || "QUEST ZONE").toUpperCase()}
+            </div>
+            <div className="game-subtitle">
+              {scene === SCENE.GUILD ? "Mercenaries of Ashburg"
+                : scene === SCENE.COMBAT ? combat.monster?.name || "Combat"
+                : activeQuest?.title || "Exploration"}
+            </div>
+          </div>
+
+          {scene === SCENE.COMBAT ? (
+            <CombatScene
+              combat={combat}
+              player={player}
+              onAction={handleCombatAction}
+              onEnd={handleCombatEnd}
               zoneBiome={zoneBiome}
-              monsters={zoneMonsters}
-              highlightedMonster={highlightedMonster}
-              playerPos={playerPos}
-              objectiveUnlocked={objectiveUnlocked}
             />
-          )}
+          ) : (
+            <div className="game-viewport" style={{ width: mapW, height: mapH }}>
+              {scene === SCENE.GUILD && <GuildScene highlightedNPC={highlightedNPC} />}
+              {scene === SCENE.QUEST && (
+                <QuestScene
+                  zoneData={zoneData}
+                  zoneBiome={zoneBiome}
+                  monsters={zoneMonsters}
+                  highlightedMonster={highlightedMonster}
+                  playerPos={playerPos}
+                  objectiveUnlocked={objectiveUnlocked}
+                />
+              )}
 
-          <PlayerSprite pos={playerPos} facing={facing} />
+              <PlayerSprite pos={playerPos} facing={facing} />
 
-          {showHint && !dialogue.isOpen && (
-            <div className="interact-hint" style={{
-              left: playerPos.x * TILE_SIZE + TILE_SIZE / 2,
-              top: playerPos.y * TILE_SIZE - 20,
-            }}>
-              [E] {showHint}
+              {showHint && !dialogue.isOpen && (
+                <div className="interact-hint" style={{
+                  left: playerPos.x * TILE_SIZE + TILE_SIZE / 2,
+                  top: playerPos.y * TILE_SIZE - 20,
+                }}>
+                  [E] {showHint}
+                </div>
+              )}
+
+              {dialogue.isOpen && (
+                <DialogueBox
+                  step={dialogue.currentStep}
+                  onAdvance={dialogue.advance}
+                  onChoice={handleChoice}
+                  onClose={dialogue.close}
+                />
+              )}
+
+              {journalOpen && (
+                <JournalPanel
+                  quests={questHistory}
+                  onClose={() => setJournalOpen(false)}
+                />
+              )}
             </div>
           )}
 
-          {dialogue.isOpen && (
-            <DialogueBox
-              step={dialogue.currentStep}
-              onAdvance={dialogue.advance}
-              onChoice={handleChoice}
-              onClose={dialogue.close}
-            />
-          )}
-        </div>
+          <HUD player={player} activeQuest={activeQuest} />
+        </>
       )}
-
-      <HUD player={player} activeQuest={activeQuest} />
     </div>
   );
 }

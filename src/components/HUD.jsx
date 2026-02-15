@@ -1,3 +1,5 @@
+import { INGREDIENTS } from "../data/crafting";
+
 export default function HUD({ player, activeQuest }) {
   return (
     <div className="hud">
@@ -38,10 +40,23 @@ export default function HUD({ player, activeQuest }) {
         </div>
       )}
 
+      {/* Materials */}
+      {player.ingredients?.length > 0 && (
+        <div className="hud-materials">
+          <span className="hud-mat-label">🔨</span>
+          {player.ingredients.map((id, i) => (
+            <span key={i} className="hud-mat-icon" title={id}>
+              {INGREDIENTS[id]?.icon || "?"}
+            </span>
+          ))}
+        </div>
+      )}
+
       {/* Controls */}
       <div className="hud-controls">
         <span><b>WASD</b> move</span>
         <span><b>E</b> interact</span>
+        <span><b>J</b> journal</span>
       </div>
     </div>
   );

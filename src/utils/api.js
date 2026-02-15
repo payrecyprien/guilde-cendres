@@ -96,3 +96,16 @@ export async function generateMonsterPortrait(monsterName, monsterDescription, b
     return null;
   }
 }
+
+/**
+ * Craft an item via AI
+ */
+export async function craftItem(systemPrompt, userMessage) {
+  const response = await fetch("/api/craft", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ system: systemPrompt, message: userMessage }),
+  });
+
+  return await response.json();
+}
