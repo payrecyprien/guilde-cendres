@@ -1,451 +1,490 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import {
-  TILE_SIZE, WALKABLE, DIRECTIONS, KEY_MAP, INTERACT_KEYS,
-  SCENE, DEFAULT_PLAYER, T,
+  TILE_SIZE, WALKABLE, DIRECTIONS, SCENE, DEFAULT_PLAYER, T,
 } from "./data/constants";
 import { GUILD_MAP, GUILD_START, NPCS } from "./data/guild";
+import { ZT, ZONE_WALKABLE, getBiomeStyle } from "./data/zones";
 import { QUEST_SYSTEM_PROMPT, buildQuestUserMessage, ARMORER_ITEMS } from "./data/prompts";
-import { generateQuest } from "./utils/api";
-import Tile from "./components/Tile";
-import NPCSprite from "./components/NPCSprite";
+import { generateQuest, generateQuestZone } from "./utils/api";
+import useDialogue from "./hooks/useDialogue";
+import useMovement from "./hooks/useMovement";
+import GuildScene from "./scenes/GuildScene";
+import QuestScene from "./scenes/QuestScene";
 import PlayerSprite from "./components/PlayerSprite";
 import DialogueBox from "./components/DialogueBox";
 import HUD from "./components/HUD";
 
-const MAP_W = GUILD_MAP[0].length;
-const MAP_H = GUILD_MAP.length;
+const GUILD_W = GUILD_MAP[0].length;
+const GUILD_H = GUILD_MAP.length;
+const ZONE_W = 14;
+const ZONE_H = 10;
 
 export default function App() {
-  // ─── GAME STATE ───
+  // ─── GLOBAL GAME STATE ───
   const [scene, setScene] = useState(SCENE.GUILD);
   const [player, setPlayer] = useState({ ...DEFAULT_PLAYER });
-  const [playerPos, setPlayerPos] = useState({ ...GUILD_START });
-  const [facing, setFacing] = useState("up");
   const [activeQuest, setActiveQuest] = useState(null);
   const [questHistory, setQuestHistory] = useState([]);
   const [pendingQuest, setPendingQuest] = useState(null);
 
-  // ─── DIALOGUE STATE (step-based) ───
-  const [dialogueSteps, setDialogueSteps] = useState([]);
-  const [stepIndex, setStepIndex] = useState(0);
+  // ─── QUEST ZONE STATE ───
+  const [zoneData, setZoneData] = useState(null);
+  const [zoneMonsters, setZoneMonsters] = useState([]);
+  const [zoneBiome, setZoneBiome] = useState(null);
+
+  // ─── HIGHLIGHT STATE ───
   const [highlightedNPC, setHighlightedNPC] = useState(null);
+  const [highlightedMonster, setHighlightedMonster] = useState(null);
   const [showHint, setShowHint] = useState(null);
 
   const gameRef = useRef(null);
   const isGenerating = useRef(false);
 
-  const currentStep = dialogueSteps[stepIndex] || null;
-  const inDialogue = dialogueSteps.length > 0;
+  // ─── HOOKS ───
+  const dialogue = useDialogue();
 
-  // ─── HELPERS ───
+  // Helpers
   const getNPCAt = useCallback(
-    (x, y) => NPCS.find((n) => n.x === x && n.y === y),
-    []
+    (x, y) => scene === SCENE.GUILD ? NPCS.find((n) => n.x === x && n.y === y) : null,
+    [scene]
   );
 
-  const getFacingTile = useCallback(
-    (pos, dir) => {
-      const [dx, dy] = DIRECTIONS[dir];
-      return { x: pos.x + dx, y: pos.y + dy };
-    },
-    []
+  const getMonsterAt = useCallback(
+    (x, y) => scene === SCENE.QUEST ? zoneMonsters.find((m) => m.x === x && m.y === y) : null,
+    [scene, zoneMonsters]
   );
 
-  const openDialogue = useCallback((steps) => {
-    setDialogueSteps(steps);
-    setStepIndex(0);
+  const isWalkable = useCallback((x, y) => {
+    if (scene === SCENE.GUILD) {
+      const tile = GUILD_MAP[y]?.[x];
+      return tile !== undefined && WALKABLE.has(tile) && !getNPCAt(x, y);
+    } else if (zoneData) {
+      const tile = zoneData.grid[y]?.[x];
+      return tile !== undefined && ZONE_WALKABLE.has(tile) && !getMonsterAt(x, y);
+    }
+    return false;
+  }, [scene, zoneData, getNPCAt, getMonsterAt]);
+
+  const getFacingTile = useCallback((pPos, dir) => {
+    const [dx, dy] = DIRECTIONS[dir];
+    return { x: pPos.x + dx, y: pPos.y + dy };
   }, []);
 
-  const closeDialogue = useCallback(() => {
-    setDialogueSteps([]);
-    setStepIndex(0);
-  }, []);
+  // ═══════════════════════════════════════════
+  // GUILD INTERACTIONS
+  // ═══════════════════════════════════════════
 
-  // ─── VAREK: QUEST GENERATION ───
-  const handleTalkToVarek = useCallback(async () => {
-    // Already has a quest
+  const talkToVarek = useCallback(async () => {
     if (activeQuest) {
-      openDialogue([
-        {
-          type: "text",
-          speaker: "Commandant Varek",
-          text: `Tu as déjà un contrat en cours : "${activeQuest.title}". Finis-le d'abord, mercenaire.`,
-        },
-      ]);
+      dialogue.open([{
+        type: "text", speaker: "Commandant Varek",
+        text: `Tu as déjà un contrat : "${activeQuest.title}". Finis-le d'abord.`,
+      }]);
       return;
     }
 
-    // Show loading, then generate
-    openDialogue([
-      {
-        type: "loading",
-        speaker: "Commandant Varek",
-        text: "Varek consulte le tableau des contrats...",
-      },
-    ]);
+    dialogue.open([{
+      type: "loading", speaker: "Commandant Varek",
+      text: "Varek consulte le tableau des contrats...",
+    }]);
 
     if (isGenerating.current) return;
     isGenerating.current = true;
 
     try {
       const quest = await generateQuest(
-        QUEST_SYSTEM_PROMPT,
-        buildQuestUserMessage(player, questHistory)
+        QUEST_SYSTEM_PROMPT, buildQuestUserMessage(player, questHistory)
       );
-
       setPendingQuest(quest);
-
-      setDialogueSteps([
+      dialogue.replaceSteps([
+        { type: "text", speaker: "Commandant Varek", text: quest.intro || "J'ai un contrat pour toi." },
         {
-          type: "text",
-          speaker: "Commandant Varek",
-          text: quest.intro || "J'ai un contrat pour toi.",
-        },
-        {
-          type: "choice",
-          speaker: "Commandant Varek",
-          text: "Tu prends le contrat ?",
-          questDetail: quest,
+          type: "choice", speaker: "Commandant Varek",
+          text: "Tu prends le contrat ?", questDetail: quest,
           choices: [
             { label: "✅ Accepter le contrat", action: "accept_quest", style: "choice-accept" },
             { label: "❌ Refuser", action: "decline_quest", style: "choice-decline" },
           ],
         },
       ]);
-      setStepIndex(0);
     } catch (err) {
-      console.error("Quest generation failed:", err);
-      setDialogueSteps([
-        {
-          type: "text",
-          speaker: "Commandant Varek",
-          text: "Hmm... Le tableau est vide aujourd'hui. Reviens plus tard, mercenaire.",
-        },
-      ]);
-      setStepIndex(0);
+      console.error("Quest gen failed:", err);
+      dialogue.replaceSteps([{
+        type: "text", speaker: "Commandant Varek",
+        text: "Le tableau est vide aujourd'hui. Reviens plus tard.",
+      }]);
     }
-
     isGenerating.current = false;
-  }, [activeQuest, player, questHistory, openDialogue]);
+  }, [activeQuest, player, questHistory, dialogue]);
 
-  // ─── FORGE-MARTEAU: SHOP ───
-  const handleTalkToArmorer = useCallback(() => {
-    const affordable = ARMORER_ITEMS.filter((item) => {
-      // Don't show items player already has (except potions)
-      if (item.id === "health_potion") return true;
-      return !player.inventory.includes(item.id);
-    });
+  const talkToArmorer = useCallback(() => {
+    const available = ARMORER_ITEMS.filter((item) =>
+      item.id === "health_potion" || !player.inventory.includes(item.id)
+    );
 
-    if (affordable.length === 0) {
-      openDialogue([
-        {
-          type: "text",
-          speaker: "Forge-Marteau",
-          text: "*regarde son stock vide* T'as déjà tout acheté. Reviens quand j'aurai du nouveau.",
-        },
-      ]);
+    if (available.length === 0) {
+      dialogue.open([{
+        type: "text", speaker: "Forge-Marteau",
+        text: "*regarde son stock vide* T'as déjà tout. Reviens quand j'aurai du nouveau.",
+      }]);
       return;
     }
 
-    // Build shop choices (max 3 items + leave)
-    const shopItems = affordable.slice(0, 3);
-    const choices = shopItems.map((item) => ({
+    const choices = available.slice(0, 3).map((item) => ({
       label: `${item.name} — ${item.cost} or (${item.stat === "hp" ? `+${item.bonus} PV` : `+${item.bonus} ${item.stat.toUpperCase()}`})`,
       action: `buy_${item.id}`,
       style: player.gold >= item.cost ? "choice-accept" : "choice-disabled",
     }));
     choices.push({ label: "Rien pour l'instant", action: "leave_shop", style: "choice-decline" });
 
-    openDialogue([
-      {
-        type: "text",
-        speaker: "Forge-Marteau",
-        text: "*frappe l'enclume* ... Hm ? Tu veux du matériel ? Regarde ce que j'ai.",
-      },
-      {
-        type: "choice",
-        speaker: "Forge-Marteau",
-        text: `Tu as ${player.gold} pièces d'or. Qu'est-ce qui t'intéresse ?`,
-        choices,
-      },
+    dialogue.open([
+      { type: "text", speaker: "Forge-Marteau", text: "*frappe l'enclume* Qu'est-ce qu'il te faut ?" },
+      { type: "choice", speaker: "Forge-Marteau", text: `Tu as ${player.gold} pièces d'or.`, choices },
     ]);
-  }, [player, openDialogue]);
+  }, [player, dialogue]);
 
-  // ─── DOOR ───
-  const handleDoor = useCallback(() => {
+  const interactDoor = useCallback(async () => {
     if (!activeQuest) {
-      openDialogue([
-        {
-          type: "text",
-          speaker: "Porte de la guilde",
-          speakerColor: "#8b7355",
-          text: "Les terres de Cendrebourg s'étendent au-delà. Accepte un contrat auprès du Commandant Varek avant de partir.",
-        },
-      ]);
-    } else {
-      openDialogue([
-        {
-          type: "text",
-          speaker: "Porte de la guilde",
-          speakerColor: "#6fa0e0",
-          text: `Tu pars en mission : "${activeQuest.title}". Destination : ${activeQuest.location_name}. Bonne chasse, mercenaire.`,
-        },
-        {
-          type: "text",
-          speaker: "— Système —",
-          speakerColor: "#5a4a35",
-          text: "⚠️ Les zones de quête arrivent dans la prochaine mise à jour. Pour l'instant, tu peux simuler un retour de mission.",
-        },
-        {
-          type: "choice",
-          speaker: "— Système —",
-          speakerColor: "#5a4a35",
-          text: "Simuler la complétion de la quête ?",
-          choices: [
-            { label: "✅ Oui — compléter la quête", action: "complete_quest", style: "choice-accept" },
-            { label: "❌ Non — rester à la guilde", action: "cancel", style: "choice-decline" },
-          ],
-        },
-      ]);
-    }
-  }, [activeQuest, openDialogue]);
-
-  // ─── CHEST ───
-  const handleChest = useCallback(() => {
-    const invText = player.inventory.length > 0
-      ? `Contenu : ${player.inventory.map(id => {
-          const item = ARMORER_ITEMS.find(i => i.id === id);
-          return item ? item.name : id;
-        }).join(", ")}.`
-      : "Le coffre est vide. Rapporte du butin de tes missions.";
-
-    openDialogue([
-      {
-        type: "text",
-        speaker: "Coffre de la guilde",
-        speakerColor: "#8b7355",
-        text: invText,
-      },
-    ]);
-  }, [player.inventory, openDialogue]);
-
-  // ─── HANDLE CHOICES ───
-  const handleChoice = useCallback(
-    (action) => {
-      // Accept quest
-      if (action === "accept_quest" && pendingQuest) {
-        setActiveQuest(pendingQuest);
-        setPendingQuest(null);
-        closeDialogue();
-        openDialogue([
-          {
-            type: "text",
-            speaker: "Commandant Varek",
-            text: `Contrat accepté : "${pendingQuest.title}". ${pendingQuest.enemy_hint ? `Un conseil : ${pendingQuest.enemy_hint}.` : ""} Équipe-toi chez Forge-Marteau si nécessaire, puis prends la porte.`,
-          },
-        ]);
-        return;
-      }
-
-      // Decline quest
-      if (action === "decline_quest") {
-        setPendingQuest(null);
-        closeDialogue();
-        openDialogue([
-          {
-            type: "text",
-            speaker: "Commandant Varek",
-            text: "Comme tu veux. Le contrat reste sur le tableau si tu changes d'avis.",
-          },
-        ]);
-        return;
-      }
-
-      // Buy item
-      if (action.startsWith("buy_")) {
-        const itemId = action.replace("buy_", "");
-        const item = ARMORER_ITEMS.find((i) => i.id === itemId);
-        if (!item) { closeDialogue(); return; }
-
-        if (player.gold < item.cost) {
-          closeDialogue();
-          openDialogue([
-            {
-              type: "text",
-              speaker: "Forge-Marteau",
-              text: `T'as pas assez d'or pour ça. Il te faut ${item.cost} pièces. Reviens après une mission.`,
-            },
-          ]);
-          return;
-        }
-
-        // Apply purchase
-        setPlayer((prev) => {
-          const updated = { ...prev, gold: prev.gold - item.cost };
-          if (item.stat === "atk") updated.atk = prev.atk + item.bonus;
-          else if (item.stat === "def") updated.def = prev.def + item.bonus;
-          else if (item.stat === "hp") {
-            updated.hp = Math.min(prev.maxHp, prev.hp + item.bonus);
-          }
-          if (item.id !== "health_potion") {
-            updated.inventory = [...prev.inventory, item.id];
-          }
-          return updated;
-        });
-
-        closeDialogue();
-        const statText = item.stat === "hp"
-          ? `+${item.bonus} PV restaurés`
-          : `+${item.bonus} ${item.stat.toUpperCase()}`;
-        openDialogue([
-          {
-            type: "text",
-            speaker: "Forge-Marteau",
-            text: `*tend ${item.name}* Voilà. ${statText}. Fais-en bon usage.`,
-          },
-        ]);
-        return;
-      }
-
-      // Complete quest (simulation)
-      if (action === "complete_quest" && activeQuest) {
-        setPlayer((prev) => ({
-          ...prev,
-          gold: prev.gold + activeQuest.reward_gold,
-          xp: prev.xp + activeQuest.reward_xp,
-          level: prev.xp + activeQuest.reward_xp >= prev.level * 30
-            ? prev.level + 1
-            : prev.level,
-        }));
-        setQuestHistory((prev) => [...prev, activeQuest]);
-        const reward = activeQuest;
-        setActiveQuest(null);
-        closeDialogue();
-        openDialogue([
-          {
-            type: "text",
-            speaker: "Commandant Varek",
-            text: `Contrat rempli ! Voici ta paie : ${reward.reward_gold} pièces d'or et ${reward.reward_xp} points d'expérience. La guilde te remercie.`,
-          },
-        ]);
-        return;
-      }
-
-      // Leave shop / cancel
-      if (action === "leave_shop" || action === "cancel") {
-        closeDialogue();
-        return;
-      }
-    },
-    [pendingQuest, player, activeQuest, closeDialogue, openDialogue]
-  );
-
-  // ─── INTERACT ───
-  const handleInteract = useCallback(() => {
-    const target = getFacingTile(playerPos, facing);
-    const npc = getNPCAt(target.x, target.y);
-
-    if (npc) {
-      if (npc.type === "quest") handleTalkToVarek();
-      else if (npc.type === "armor") handleTalkToArmorer();
+      dialogue.open([{
+        type: "text", speaker: "Porte de la guilde", speakerColor: "#8b7355",
+        text: "Accepte un contrat auprès du Commandant Varek avant de partir.",
+      }]);
       return;
     }
 
-    const tile = GUILD_MAP[target.y]?.[target.x];
-    if (tile === T.DOOR) handleDoor();
-    else if (tile === T.CHEST) handleChest();
-  }, [playerPos, facing, getFacingTile, getNPCAt, handleTalkToVarek, handleTalkToArmorer, handleDoor, handleChest]);
+    dialogue.open([{
+      type: "loading", speaker: "— Système —", speakerColor: "#5a4a35",
+      text: `Génération de la zone : ${activeQuest.location_name || activeQuest.location}...`,
+    }]);
 
-  // ─── ADVANCE DIALOGUE ───
-  const advanceDialogue = useCallback(() => {
-    if (!inDialogue) return;
-    if (currentStep?.type === "choice" || currentStep?.type === "loading") return;
+    if (isGenerating.current) return;
+    isGenerating.current = true;
 
-    if (stepIndex < dialogueSteps.length - 1) {
-      setStepIndex((i) => i + 1);
-    } else {
-      closeDialogue();
+    try {
+      const zone = await generateQuestZone(activeQuest);
+      if (!zone.grid) throw new Error("No grid");
+
+      const biome = getBiomeStyle(activeQuest.location);
+      setZoneData(zone);
+      setZoneMonsters(zone.monsters || []);
+      setZoneBiome(biome);
+
+      // Find entry position (1 tile above entry tile)
+      let entryPos = { x: 6, y: 8 };
+      for (let y = 0; y < zone.grid.length; y++) {
+        for (let x = 0; x < zone.grid[y].length; x++) {
+          if (zone.grid[y][x] === 3) { entryPos = { x, y: y - 1 }; break; }
+        }
+      }
+      if (!zone.grid[entryPos.y] || !ZONE_WALKABLE.has(zone.grid[entryPos.y][entryPos.x])) {
+        entryPos = { x: 6, y: 8 };
+      }
+
+      movement.resetPosition(entryPos, "up");
+      setScene(SCENE.QUEST);
+      dialogue.close();
+
+      setTimeout(() => {
+        dialogue.open([{
+          type: "text", speaker: biome.name, speakerColor: "#6fa0e0",
+          text: zone.ambiance || "Tu arrives dans la zone de quête.",
+        }]);
+      }, 200);
+    } catch (err) {
+      console.error("Zone gen failed:", err);
+      dialogue.replaceSteps([{
+        type: "text", speaker: "— Système —", speakerColor: "#c0392b",
+        text: "Échec de la génération. Réessaie en repassant par la porte.",
+      }]);
     }
-  }, [inDialogue, currentStep, stepIndex, dialogueSteps.length, closeDialogue]);
+    isGenerating.current = false;
+  }, [activeQuest, dialogue]);
 
-  // ─── KEYBOARD ───
-  const handleKeyDown = useCallback(
-    (e) => {
-      // In dialogue
-      if (inDialogue) {
-        if (INTERACT_KEYS.has(e.key)) {
-          e.preventDefault();
-          advanceDialogue();
-        }
-        if (e.key === "Escape") {
-          if (currentStep?.type !== "loading") closeDialogue();
-        }
-        // Number keys for choices
-        if (currentStep?.type === "choice" && currentStep.choices) {
-          const num = parseInt(e.key);
-          if (num >= 1 && num <= currentStep.choices.length) {
-            e.preventDefault();
-            handleChoice(currentStep.choices[num - 1].action);
-          }
-        }
+  const interactChest = useCallback(() => {
+    const invText = player.inventory.length > 0
+      ? `Équipement : ${player.inventory.map(id => ARMORER_ITEMS.find(i => i.id === id)?.name || id).join(", ")}.`
+      : "Le coffre est vide.";
+    dialogue.open([{ type: "text", speaker: "Coffre", speakerColor: "#8b7355", text: invText }]);
+  }, [player.inventory, dialogue]);
+
+  // ═══════════════════════════════════════════
+  // QUEST ZONE INTERACTIONS
+  // ═══════════════════════════════════════════
+
+  const interactZoneEntry = useCallback(() => {
+    dialogue.open([{
+      type: "choice", speaker: "Portail de retour", speakerColor: "#d4a856",
+      text: "Rentrer à la guilde ? (La quête sera abandonnée si non complétée)",
+      choices: [
+        { label: "✅ Rentrer à la guilde", action: "return_guild", style: "choice-accept" },
+        { label: "❌ Continuer", action: "cancel", style: "choice-decline" },
+      ],
+    }]);
+  }, [dialogue]);
+
+  const interactObjective = useCallback(() => {
+    dialogue.open([
+      {
+        type: "text", speaker: "— Objectif —", speakerColor: "#ffd700",
+        text: `Quête "${activeQuest?.title}" accomplie !`,
+      },
+      {
+        type: "choice", speaker: "— Système —", speakerColor: "#5a4a35",
+        text: "Rentrer à la guilde pour ta récompense ?",
+        choices: [
+          { label: "✅ Retour à la guilde", action: "complete_and_return", style: "choice-accept" },
+        ],
+      },
+    ]);
+  }, [activeQuest, dialogue]);
+
+  const encounterMonster = useCallback((monster) => {
+    const playerDmg = Math.max(1, player.atk - monster.def);
+    const monsterDmg = Math.max(1, monster.atk - player.def);
+    const turnsToKill = Math.ceil(monster.hp / playerDmg);
+    const damageTaken = monsterDmg * (turnsToKill - 1);
+
+    dialogue.open([
+      {
+        type: "text", speaker: monster.name, speakerColor: "#c0392b",
+        text: `${monster.description || "Une créature hostile !"} (PV: ${monster.hp}, ATK: ${monster.atk}, DEF: ${monster.def})`,
+      },
+      {
+        type: "choice", speaker: "— Combat —", speakerColor: "#c0392b",
+        text: `Tu peux vaincre ${monster.name} en ~${turnsToKill} coups, mais tu prendras ~${damageTaken} dégâts.`,
+        choices: [
+          { label: `⚔ Attaquer (≈-${damageTaken} PV)`, action: `fight_${monster.x}_${monster.y}`, style: "choice-accept" },
+          { label: "🏃 Reculer", action: "cancel", style: "choice-decline" },
+        ],
+      },
+    ]);
+  }, [player, dialogue]);
+
+  // ═══════════════════════════════════════════
+  // INTERACTION ROUTER
+  // ═══════════════════════════════════════════
+
+  const handleInteract = useCallback(() => {
+    const target = getFacingTile(movement.pos, movement.facing);
+
+    if (scene === SCENE.GUILD) {
+      const npc = getNPCAt(target.x, target.y);
+      if (npc?.type === "quest") return talkToVarek();
+      if (npc?.type === "armor") return talkToArmorer();
+      const tile = GUILD_MAP[target.y]?.[target.x];
+      if (tile === T.DOOR) return interactDoor();
+      if (tile === T.CHEST) return interactChest();
+    }
+
+    if (scene === SCENE.QUEST && zoneData) {
+      const monster = getMonsterAt(target.x, target.y);
+      if (monster) return encounterMonster(monster);
+      const tile = zoneData.grid[target.y]?.[target.x];
+      if (tile === ZT.ENTRY) return interactZoneEntry();
+      if (tile === ZT.OBJECTIVE) return interactObjective();
+    }
+  }, [scene, zoneData, getFacingTile, getNPCAt, getMonsterAt,
+    talkToVarek, talkToArmorer, interactDoor, interactChest,
+    encounterMonster, interactZoneEntry, interactObjective]);
+
+  // ═══════════════════════════════════════════
+  // SCENE TRANSITIONS
+  // ═══════════════════════════════════════════
+
+  const returnToGuild = useCallback((healPlayer = false) => {
+    setScene(SCENE.GUILD);
+    movement.resetPosition({ ...GUILD_START }, "up");
+    setZoneData(null);
+    setZoneMonsters([]);
+    dialogue.close();
+    if (healPlayer) {
+      setPlayer((prev) => ({ ...prev, hp: Math.max(20, Math.floor(prev.maxHp / 2)) }));
+    }
+  }, [dialogue]);
+
+  // ═══════════════════════════════════════════
+  // CHOICE HANDLER
+  // ═══════════════════════════════════════════
+
+  const handleChoice = useCallback((action) => {
+    // ─── Quest accept/decline ───
+    if (action === "accept_quest" && pendingQuest) {
+      setActiveQuest(pendingQuest);
+      setPendingQuest(null);
+      dialogue.close();
+      dialogue.open([{
+        type: "text", speaker: "Commandant Varek",
+        text: `Contrat accepté : "${pendingQuest.title}". ${pendingQuest.enemy_hint ? `Un conseil : ${pendingQuest.enemy_hint}.` : ""} Équipe-toi si besoin, puis prends la porte.`,
+      }]);
+      return;
+    }
+    if (action === "decline_quest") {
+      setPendingQuest(null);
+      dialogue.close();
+      return;
+    }
+
+    // ─── Shop ───
+    if (action.startsWith("buy_")) {
+      const itemId = action.replace("buy_", "");
+      const item = ARMORER_ITEMS.find((i) => i.id === itemId);
+      if (!item || player.gold < item.cost) {
+        dialogue.close();
+        dialogue.open([{
+          type: "text", speaker: "Forge-Marteau",
+          text: "T'as pas assez d'or. Reviens après une mission.",
+        }]);
         return;
       }
+      setPlayer((prev) => {
+        const u = { ...prev, gold: prev.gold - item.cost };
+        if (item.stat === "atk") u.atk = prev.atk + item.bonus;
+        else if (item.stat === "def") u.def = prev.def + item.bonus;
+        else if (item.stat === "hp") u.hp = Math.min(prev.maxHp, prev.hp + item.bonus);
+        if (item.id !== "health_potion") u.inventory = [...prev.inventory, item.id];
+        return u;
+      });
+      dialogue.close();
+      const st = item.stat === "hp" ? `+${item.bonus} PV` : `+${item.bonus} ${item.stat.toUpperCase()}`;
+      dialogue.open([{
+        type: "text", speaker: "Forge-Marteau", text: `*tend ${item.name}* ${st}. Fais-en bon usage.`,
+      }]);
+      return;
+    }
 
-      // Movement
-      const dir = KEY_MAP[e.key];
-      if (dir) {
-        e.preventDefault();
-        setFacing(dir);
-        const [dx, dy] = DIRECTIONS[dir];
-        setPlayerPos((prev) => {
-          const nx = prev.x + dx;
-          const ny = prev.y + dy;
-          const tile = GUILD_MAP[ny]?.[nx];
-          if (tile !== undefined && WALKABLE.has(tile) && !getNPCAt(nx, ny)) {
-            return { x: nx, y: ny };
-          }
-          return prev;
-        });
+    // ─── Combat ───
+    if (action.startsWith("fight_")) {
+      const parts = action.split("_");
+      const mx = Number(parts[1]);
+      const my = Number(parts[2]);
+      const monster = zoneMonsters.find((m) => m.x === mx && m.y === my);
+      if (!monster) { dialogue.close(); return; }
+
+      const playerDmg = Math.max(1, player.atk - monster.def);
+      const monsterDmg = Math.max(1, monster.atk - player.def);
+      const turnsToKill = Math.ceil(monster.hp / playerDmg);
+      const damageTaken = monsterDmg * (turnsToKill - 1);
+      const newHp = Math.max(0, player.hp - damageTaken);
+
+      setPlayer((prev) => ({ ...prev, hp: newHp }));
+      setZoneMonsters((prev) => prev.filter((m) => !(m.x === mx && m.y === my)));
+
+      if (newHp <= 0) {
+        dialogue.close();
+        dialogue.open([
+          { type: "text", speaker: "— Défaite —", speakerColor: "#c0392b", text: `${monster.name} t'a vaincu. Tu te réveilles à la guilde.` },
+          { type: "choice", speaker: "— Système —", speakerColor: "#5a4a35", text: "Mission échouée.",
+            choices: [{ label: "Retour à la guilde", action: "death_return", style: "choice-decline" }],
+          },
+        ]);
+      } else {
+        dialogue.close();
+        dialogue.open([{
+          type: "text", speaker: "— Victoire —", speakerColor: "#6a9f4a",
+          text: `${monster.name} vaincu ! +${monster.xp || 10} XP, +${monster.gold || 5} or. (PV: ${newHp})`,
+        }]);
+        setPlayer((prev) => ({
+          ...prev, gold: prev.gold + (monster.gold || 5), xp: prev.xp + (monster.xp || 10),
+        }));
       }
+      return;
+    }
 
-      // Interaction
-      if (INTERACT_KEYS.has(e.key)) {
-        e.preventDefault();
-        handleInteract();
-      }
-    },
-    [inDialogue, currentStep, advanceDialogue, closeDialogue, handleChoice, handleInteract, getNPCAt]
-  );
+    // ─── Return / Complete ───
+    if (action === "return_guild") {
+      returnToGuild();
+      return;
+    }
+    if (action === "complete_and_return") {
+      const reward = activeQuest;
+      setPlayer((prev) => {
+        const newXp = prev.xp + reward.reward_xp;
+        const levelUp = newXp >= prev.level * 30;
+        return {
+          ...prev,
+          gold: prev.gold + reward.reward_gold,
+          xp: newXp,
+          level: levelUp ? prev.level + 1 : prev.level,
+          hp: levelUp ? prev.maxHp + 10 : prev.hp,
+          maxHp: levelUp ? prev.maxHp + 10 : prev.maxHp,
+        };
+      });
+      setQuestHistory((prev) => [...prev, activeQuest]);
+      const rewardCopy = activeQuest;
+      setActiveQuest(null);
+      returnToGuild();
+      setTimeout(() => {
+        dialogue.open([{
+          type: "text", speaker: "Commandant Varek",
+          text: `Contrat rempli ! +${rewardCopy.reward_gold} or, +${rewardCopy.reward_xp} XP. Bien joué, mercenaire.`,
+        }]);
+      }, 200);
+      return;
+    }
+    if (action === "death_return") {
+      setActiveQuest(null);
+      returnToGuild(true);
+      return;
+    }
 
+    // ─── Generic close ───
+    if (action === "leave_shop" || action === "cancel") {
+      dialogue.close();
+    }
+  }, [pendingQuest, player, activeQuest, zoneMonsters, dialogue, returnToGuild]);
+
+  // ─── MOVEMENT HOOK ───
+  const movement = useMovement({
+    isWalkable,
+    onInteract: handleInteract,
+    dialogueOpen: dialogue.isOpen,
+    onDialogueAdvance: dialogue.advance,
+    onDialogueClose: dialogue.close,
+    dialogueStep: dialogue.currentStep,
+    onChoice: handleChoice,
+    initialPos: { ...GUILD_START },
+    initialFacing: "up",
+  });
+
+  // ─── AUTO-INTERACT: step on objective/entry ───
   useEffect(() => {
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handleKeyDown]);
+    if (scene !== SCENE.QUEST || !zoneData || dialogue.isOpen) return;
+    const tile = zoneData.grid[movement.pos.y]?.[movement.pos.x];
+    if (tile === ZT.OBJECTIVE) interactObjective();
+    else if (tile === ZT.ENTRY) interactZoneEntry();
+  }, [scene, movement.pos, zoneData, dialogue.isOpen, interactObjective, interactZoneEntry]);
 
-  // ─── INTERACTION HINTS ───
+  // ─── HINTS ───
   useEffect(() => {
-    const target = getFacingTile(playerPos, facing);
-    const npc = getNPCAt(target.x, target.y);
-    const tile = GUILD_MAP[target.y]?.[target.x];
+    const target = getFacingTile(movement.pos, movement.facing);
 
-    setHighlightedNPC(npc || null);
-
-    if (npc) setShowHint(`Parler à ${npc.name}`);
-    else if (tile === T.DOOR) setShowHint(activeQuest ? "Partir en mission" : "Sortir de la guilde");
-    else if (tile === T.CHEST) setShowHint("Inventaire");
-    else setShowHint(null);
-  }, [playerPos, facing, activeQuest, getFacingTile, getNPCAt]);
+    if (scene === SCENE.GUILD) {
+      const npc = getNPCAt(target.x, target.y);
+      const tile = GUILD_MAP[target.y]?.[target.x];
+      setHighlightedNPC(npc || null);
+      setHighlightedMonster(null);
+      if (npc) setShowHint(`Parler à ${npc.name}`);
+      else if (tile === T.DOOR) setShowHint(activeQuest ? "🚪 Partir en mission" : "Sortir");
+      else if (tile === T.CHEST) setShowHint("Inventaire");
+      else setShowHint(null);
+    } else if (scene === SCENE.QUEST && zoneData) {
+      const monster = getMonsterAt(target.x, target.y);
+      const tile = zoneData.grid[target.y]?.[target.x];
+      setHighlightedNPC(null);
+      setHighlightedMonster(monster || null);
+      if (monster) setShowHint(`⚔ ${monster.name}`);
+      else if (tile === ZT.ENTRY) setShowHint("🚪 Retour");
+      else if (tile === ZT.OBJECTIVE) setShowHint("⭐ Objectif");
+      else setShowHint(null);
+    }
+  }, [scene, movement.pos, movement.facing, activeQuest, zoneData, getFacingTile, getNPCAt, getMonsterAt]);
 
   // Auto-focus
   useEffect(() => { gameRef.current?.focus(); }, []);
 
-  // Torch positions (precomputed)
-  const torchPositions = [];
-  GUILD_MAP.forEach((row, y) => {
-    row.forEach((tile, x) => {
-      if (tile === T.TORCH) torchPositions.push({ x, y });
-    });
-  });
+  // ─── DERIVED ───
+  const mapW = (scene === SCENE.GUILD ? GUILD_W : ZONE_W) * TILE_SIZE;
+  const mapH = (scene === SCENE.GUILD ? GUILD_H : ZONE_H) * TILE_SIZE;
 
   // ─── RENDER ───
   return (
@@ -455,74 +494,47 @@ export default function App() {
       tabIndex={0}
       onClick={() => gameRef.current?.focus()}
     >
-      {/* Header */}
       <div className="game-header">
-        <div className="game-title">GUILDE DES CENDRES</div>
-        <div className="game-subtitle">Mercenaires de Cendrebourg — RPG par IA</div>
+        <div className="game-title">
+          {scene === SCENE.GUILD ? "GUILDE DES CENDRES" : (zoneBiome?.name || "ZONE DE QUÊTE").toUpperCase()}
+        </div>
+        <div className="game-subtitle">
+          {scene === SCENE.GUILD ? "Mercenaires de Cendrebourg" : activeQuest?.title || "Exploration"}
+        </div>
       </div>
 
-      {/* Game viewport */}
-      <div
-        className="game-viewport"
-        style={{ width: MAP_W * TILE_SIZE, height: MAP_H * TILE_SIZE }}
-      >
-        {/* Torch lighting */}
-        {torchPositions.map((t, i) => (
-          <div
-            key={`glow-${i}`}
-            className="torch-glow"
-            style={{
-              left: t.x * TILE_SIZE - 60,
-              top: t.y * TILE_SIZE - 20,
-              width: TILE_SIZE + 120,
-              height: TILE_SIZE + 100,
-              animationDelay: `${i * 0.4}s`,
-            }}
+      <div className="game-viewport" style={{ width: mapW, height: mapH }}>
+        {scene === SCENE.GUILD && <GuildScene highlightedNPC={highlightedNPC} />}
+        {scene === SCENE.QUEST && (
+          <QuestScene
+            zoneData={zoneData}
+            zoneBiome={zoneBiome}
+            monsters={zoneMonsters}
+            highlightedMonster={highlightedMonster}
           />
-        ))}
-
-        {/* Tiles */}
-        {GUILD_MAP.map((row, y) =>
-          row.map((tile, x) => <Tile key={`${x}-${y}`} type={tile} x={x} y={y} />)
         )}
 
-        {/* NPCs */}
-        {NPCS.map((npc) => (
-          <NPCSprite
-            key={npc.id}
-            npc={npc}
-            isHighlighted={highlightedNPC?.id === npc.id}
-          />
-        ))}
+        <PlayerSprite pos={movement.pos} facing={movement.facing} />
 
-        {/* Player */}
-        <PlayerSprite pos={playerPos} facing={facing} />
-
-        {/* Interact hint */}
-        {showHint && !inDialogue && (
-          <div
-            className="interact-hint"
-            style={{
-              left: playerPos.x * TILE_SIZE + TILE_SIZE / 2,
-              top: playerPos.y * TILE_SIZE - 20,
-            }}
-          >
+        {showHint && !dialogue.isOpen && (
+          <div className="interact-hint" style={{
+            left: movement.pos.x * TILE_SIZE + TILE_SIZE / 2,
+            top: movement.pos.y * TILE_SIZE - 20,
+          }}>
             [E] {showHint}
           </div>
         )}
 
-        {/* Dialogue */}
-        {inDialogue && (
+        {dialogue.isOpen && (
           <DialogueBox
-            step={currentStep}
-            onAdvance={advanceDialogue}
+            step={dialogue.currentStep}
+            onAdvance={dialogue.advance}
             onChoice={handleChoice}
-            onClose={closeDialogue}
+            onClose={dialogue.close}
           />
         )}
       </div>
 
-      {/* HUD */}
       <HUD player={player} activeQuest={activeQuest} />
     </div>
   );

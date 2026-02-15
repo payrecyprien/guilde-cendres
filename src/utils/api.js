@@ -46,3 +46,22 @@ export async function generateQuest(systemPrompt, userMessage) {
 
   return quest;
 }
+
+/**
+ * Generate a quest zone (map + monsters) via AI
+ */
+export async function generateQuestZone(quest) {
+  const response = await fetch("/api/questzone", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ quest }),
+  });
+
+  const data = await response.json();
+
+  if (data.error && !data.grid) {
+    throw new Error(data.error);
+  }
+
+  return data;
+}
