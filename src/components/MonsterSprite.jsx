@@ -1,6 +1,6 @@
 import { TILE_SIZE } from "../data/constants";
 
-export default function MonsterSprite({ monster, isHighlighted }) {
+export default function MonsterSprite({ monster, isHighlighted, portraitUrl }) {
   return (
     <div
       className="monster-sprite"
@@ -12,11 +12,20 @@ export default function MonsterSprite({ monster, isHighlighted }) {
       }}
     >
       <div className={`monster-body ${isHighlighted ? "monster-highlighted" : ""}`}>
-        {/* Monster shape — menacing */}
-        <div className="monster-head" />
-        <div className="monster-torso">
-          <span className="monster-icon">👹</span>
-        </div>
+        {portraitUrl ? (
+          <img
+            src={portraitUrl}
+            alt={monster.name}
+            className="monster-portrait-map"
+          />
+        ) : (
+          <>
+            <div className="monster-head" />
+            <div className="monster-torso">
+              <span className="monster-icon">👹</span>
+            </div>
+          </>
+        )}
       </div>
 
       {isHighlighted && (

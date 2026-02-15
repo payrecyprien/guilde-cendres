@@ -707,6 +707,16 @@ body {
   font-size: 12px;
 }
 
+.monster-portrait-map {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #8a4040;
+  box-shadow: 0 0 6px rgba(192, 57, 43, 0.4);
+  image-rendering: auto;
+}
+
 .monster-name-tag {
   position: absolute;
   top: -24px;

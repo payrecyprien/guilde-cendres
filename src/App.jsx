@@ -5,9 +5,14 @@ import {
 } from "./data/constants";
 import { GUILD_MAP, GUILD_START, NPCS } from "./data/guild";
 import { ZT, ZONE_WALKABLE, getBiomeStyle } from "./data/zones";
-import { QUEST_SYSTEM_PROMPT, buildQuestUserMessage, ARMORER_ITEMS, CRAFT_SYSTEM_PROMPT, buildCraftUserMessage } from "./data/prompts";
+import {
+  QUEST_SYSTEM_PROMPT, buildQuestUserMessage, ARMORER_ITEMS,
+  CRAFT_SYSTEM_PROMPT, buildCraftUserMessage,
+  VAREK_DIALOGUE_PROMPT, buildVarekDialogueMessage,
+  IRONHAMMER_DIALOGUE_PROMPT, buildIronhammerDialogueMessage,
+} from "./data/prompts";
 import { INGREDIENTS, rollDrop, MAX_CRAFTED_SLOTS } from "./data/crafting";
-import { generateQuest, generateQuestZone, craftItem } from "./utils/api";
+import { generateQuest, generateQuestZone, craftItem, getNPCDialogue, generateMonsterPortrait } from "./utils/api";
 import useDialogue from "./hooks/useDialogue";
 import useCombat from "./hooks/useCombat";
 import useKeyboard from "./hooks/useKeyboard";
@@ -40,6 +45,7 @@ export default function App() {
   const [zoneData, setZoneData] = useState(null);
   const [zoneMonsters, setZoneMonsters] = useState([]);
   const [zoneBiome, setZoneBiome] = useState(null);
+  const [monsterPortraits, setMonsterPortraits] = useState({}); // { "monsterName": "url" }
 
   const [highlightedNPC, setHighlightedNPC] = useState(null);
   const [highlightedMonster, setHighlightedMonster] = useState(null);
@@ -84,31 +90,19 @@ export default function App() {
     return { x: pos.x + dx, y: pos.y + dy };
   };
 
-  // ─── CONTEXTUAL NPC DIALOGUE ───
-  const getVarekGreeting = useCallback(() => {
-    // React to quest return
-    if (lastQuestResult === "victory") {
-      const hpRatio = player.hp / player.maxHp;
-      if (hpRatio >= 0.9) return "Not a scratch on you. Impressive work out there.";
-      if (hpRatio >= 0.5) return "You look like you've seen some action. Good. That means you're still standing.";
-      return "You look roughed up. Get yourself patched before the next contract.";
-    }
-    if (lastQuestResult === "defeat") {
-      return "Back already? Don't beat yourself up — even the best take a hit sometimes. Dust off and try again.";
-    }
-    // Level-based
-    if (player.level >= 5) return "Our finest blade. What'll it be, veteran?";
-    if (player.level >= 3) return "You're making a name for yourself. The board's got fresh contracts.";
-    if (questHistory.length > 0) return "Ready for another run? Let's see what's on the board.";
-    return "Welcome to the Ash Guild, mercenary. I've got work if you've got the nerve.";
-  }, [lastQuestResult, player.hp, player.maxHp, player.level, questHistory.length]);
+  // ─── CONTEXTUAL NPC DIALOGUE (fixed fallbacks) ───
+  const getVarekFallback = useCallback(() => {
+    if (lastQuestResult === "victory") return "Good, you're back in one piece.";
+    if (lastQuestResult === "defeat") return "Back already? Dust off and try again.";
+    if (questHistory.length > 0) return "Ready for another run?";
+    return "Welcome to the Ash Guild, mercenary.";
+  }, [lastQuestResult, questHistory.length]);
 
-  const getIronhammerGreeting = useCallback(() => {
-    if (player.hp < player.maxHp * 0.4) return "*eyes your wounds* You need a potion before anything else, friend.";
-    if (player.inventory.length >= 4) return "*nods approvingly* You're well-equipped. But there's always room for an upgrade.";
-    if (player.level >= 3) return "*polishes a blade* I've got some serious gear for someone of your caliber.";
+  const getIronhammerFallback = useCallback(() => {
+    if (player.hp < player.maxHp * 0.4) return "*eyes your wounds* You need a potion first.";
+    if (player.ingredients?.length >= 2) return "*eyes the materials* Looks like you've got something for me.";
     return "*strikes the anvil* What do you need?";
-  }, [player.hp, player.maxHp, player.inventory.length, player.level]);
+  }, [player.hp, player.maxHp, player.ingredients]);
 
   // ═══════════════════════════════════════════
   // GUILD INTERACTIONS
@@ -123,22 +117,48 @@ export default function App() {
       return;
     }
 
+    const questResult = lastQuestResult;
     setLastQuestResult(null);
 
+    // Show fallback greeting + loading for quest gen
     dialogue.open([
-      { type: "text", speaker: "Commander Varek", text: getVarekGreeting() },
+      { type: "text", speaker: "Commander Varek", text: getVarekFallback() },
       { type: "loading", speaker: "Commander Varek", text: "Varek checks the contract board..." },
     ]);
 
     if (isGenerating.current) return;
     isGenerating.current = true;
 
+    // Fire AI greeting + quest gen in parallel
+    let aiGreeting = null;
+    const greetingPromise = getNPCDialogue(
+      VAREK_DIALOGUE_PROMPT,
+      buildVarekDialogueMessage({
+        level: player.level, hp: player.hp, maxHp: player.maxHp,
+        gold: player.gold, lastResult: questResult, questCount: questHistory.length,
+      })
+    ).then((text) => { aiGreeting = text; return text; });
+
+    const questPromise = generateQuest(
+      QUEST_SYSTEM_PROMPT, buildQuestUserMessage(player, questHistory)
+    );
+
+    // Replace greeting as soon as AI responds (while quest still loading)
+    greetingPromise.then((aiText) => {
+      if (aiText) {
+        dialogue.updateStep(0, { type: "text", speaker: "Commander Varek", text: aiText });
+      }
+    }).catch(() => {});
+
     try {
-      const quest = await generateQuest(
-        QUEST_SYSTEM_PROMPT, buildQuestUserMessage(player, questHistory)
-      );
+      const quest = await questPromise;
       setPendingQuest(quest);
+      const greetingStep = {
+        type: "text", speaker: "Commander Varek",
+        text: aiGreeting || getVarekFallback(),
+      };
       dialogue.replaceSteps([
+        greetingStep,
         { type: "text", speaker: "Commander Varek", text: quest.intro || "I've got a contract for you." },
         {
           type: "choice", speaker: "Commander Varek",
@@ -157,13 +177,9 @@ export default function App() {
       }]);
     }
     isGenerating.current = false;
-  }, [activeQuest, player, questHistory, dialogue, getVarekGreeting]);
+  }, [activeQuest, player, questHistory, lastQuestResult, dialogue, getVarekFallback]);
 
   const talkToArmorer = useCallback(() => {
-    const steps = [
-      { type: "text", speaker: "Ironhammer", text: getIronhammerGreeting() },
-    ];
-
     const choices = [];
 
     // Shop items
@@ -178,7 +194,7 @@ export default function App() {
       });
     });
 
-    // Craft option (need 2+ ingredients, max slots not reached)
+    // Craft option
     if (player.ingredients.length >= 2 && player.craftedGear.length < MAX_CRAFTED_SLOTS) {
       const ingIcons = player.ingredients.slice(0, 4).map(id => INGREDIENTS[id]?.icon || "?").join("");
       choices.push({
@@ -196,14 +212,27 @@ export default function App() {
 
     choices.push({ label: "Nothing for now", action: "leave_shop", style: "choice-decline" });
 
-    steps.push({
-      type: "choice", speaker: "Ironhammer",
-      text: `You have ${player.gold} gold.${player.ingredients.length > 0 ? ` Materials: ${player.ingredients.map(id => INGREDIENTS[id]?.icon || "?").join(" ")}` : ""}`,
-      choices,
-    });
+    const matText = player.ingredients.length > 0
+      ? ` Materials: ${player.ingredients.map(id => INGREDIENTS[id]?.icon || "?").join(" ")}`
+      : "";
 
-    dialogue.open(steps);
-  }, [player, dialogue, getIronhammerGreeting]);
+    dialogue.open([
+      { type: "text", speaker: "Ironhammer", text: getIronhammerFallback() },
+      { type: "choice", speaker: "Ironhammer", text: `You have ${player.gold} gold.${matText}`, choices },
+    ]);
+
+    // Fire AI greeting async — replace step 0 when ready
+    getNPCDialogue(
+      IRONHAMMER_DIALOGUE_PROMPT,
+      buildIronhammerDialogueMessage({
+        level: player.level, hp: player.hp, maxHp: player.maxHp,
+        ingredients: player.ingredients.length, gearCount: player.craftedGear.length,
+        inventoryCount: player.inventory.length,
+      })
+    ).then((aiText) => {
+      if (aiText) dialogue.updateStep(0, { type: "text", speaker: "Ironhammer", text: aiText });
+    }).catch(() => {});
+  }, [player, dialogue, getIronhammerFallback]);
 
   const interactDoor = useCallback(async () => {
     if (!activeQuest) {
@@ -245,6 +274,16 @@ export default function App() {
       setFacing("up");
       setScene(SCENE.QUEST);
       dialogue.close();
+
+      // Pre-generate monster portraits (async, non-blocking)
+      setMonsterPortraits({});
+      (zone.monsters || []).forEach((m) => {
+        generateMonsterPortrait(m.name, m.description, activeQuest.location)
+          .then((url) => {
+            if (url) setMonsterPortraits((prev) => ({ ...prev, [m.name]: url }));
+          })
+          .catch(() => {});
+      });
 
       setTimeout(() => {
         dialogue.open([{
@@ -317,9 +356,10 @@ export default function App() {
 
   const encounterMonster = useCallback((monster) => {
     combatTargetRef.current = monster;
-    combat.startCombat(monster, zoneBiome?.name);
+    const preloadedPortrait = monsterPortraits[monster.name] || null;
+    combat.startCombat(monster, zoneBiome?.name, preloadedPortrait);
     setScene(SCENE.COMBAT);
-  }, [combat, zoneBiome]);
+  }, [combat, zoneBiome, monsterPortraits]);
 
   // ═══════════════════════════════════════════
   // SCENE TRANSITIONS
@@ -741,6 +781,7 @@ export default function App() {
                   highlightedMonster={highlightedMonster}
                   playerPos={playerPos}
                   objectiveUnlocked={objectiveUnlocked}
+                  monsterPortraits={monsterPortraits}
                 />
               )}
 

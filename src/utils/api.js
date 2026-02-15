@@ -109,3 +109,20 @@ export async function craftItem(systemPrompt, userMessage) {
 
   return await response.json();
 }
+
+/**
+ * Get AI-generated NPC dialogue (Haiku, fast)
+ */
+export async function getNPCDialogue(systemPrompt, userMessage) {
+  try {
+    const response = await fetch("/api/npc-dialogue", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ system: systemPrompt, message: userMessage }),
+    });
+    const data = await response.json();
+    return data.text || null;
+  } catch {
+    return null;
+  }
+}

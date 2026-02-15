@@ -110,3 +110,33 @@ export function buildCraftUserMessage(ingredients) {
   const list = ingredients.map(i => `${i.name} (Tier ${i.tier})`).join(", ");
   return `Forge an item from these ingredients: ${list}. Respond with the crafted item JSON.`;
 }
+
+// ─── NPC CONTEXTUAL DIALOGUE ───
+export const VAREK_DIALOGUE_PROMPT = `You are Commander Varek, leader of the Ash Guild in Ashburg. You are direct, pragmatic, occasionally sarcastic, and address the mercenary informally. You speak like a battle-hardened veteran.
+
+Write a SINGLE short greeting (1-2 sentences max). No quotes around it. Be varied and natural — never repeat yourself.`;
+
+export function buildVarekDialogueMessage(context) {
+  const parts = [`Mercenary is level ${context.level}, HP ${context.hp}/${context.maxHp}, ${context.gold} gold.`];
+  if (context.lastResult === "victory") parts.push("They just returned victorious from a quest.");
+  if (context.lastResult === "defeat") parts.push("They just got defeated and returned empty-handed.");
+  if (context.questCount === 0) parts.push("This is their first time at the guild.");
+  else parts.push(`They've completed ${context.questCount} quests so far.`);
+  if (context.hp < context.maxHp * 0.4) parts.push("They look badly wounded.");
+  parts.push("Greet them in character. 1-2 sentences, no more.");
+  return parts.join(" ");
+}
+
+export const IRONHAMMER_DIALOGUE_PROMPT = `You are Ironhammer, the armorer of the Ash Guild in Ashburg. You are gruff, laconic, and communicate partly through actions (written with *asterisks*). You care about your craft above all else.
+
+Write a SINGLE short greeting (1-2 sentences max). No quotes around it. Be varied and natural.`;
+
+export function buildIronhammerDialogueMessage(context) {
+  const parts = [`Mercenary is level ${context.level}, HP ${context.hp}/${context.maxHp}.`];
+  if (context.ingredients > 0) parts.push(`They're carrying ${context.ingredients} monster materials.`);
+  if (context.gearCount > 0) parts.push(`They have ${context.gearCount} pieces of forged equipment.`);
+  if (context.hp < context.maxHp * 0.4) parts.push("They look badly injured.");
+  if (context.inventoryCount >= 4) parts.push("They're well-equipped from the shop.");
+  parts.push("Greet them in character. 1-2 sentences, no more.");
+  return parts.join(" ");
+}

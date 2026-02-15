@@ -25,7 +25,7 @@ export default function useCombat() {
 
   const isProcessing = useRef(false);
 
-  const startCombat = useCallback((monsterData, biomeName) => {
+  const startCombat = useCallback((monsterData, biomeName, preloadedPortrait) => {
     setMonster(monsterData);
     setMonsterHp(monsterData.hp);
     setTurnNumber(1);
@@ -35,17 +35,23 @@ export default function useCombat() {
     }]);
     setLastNarration(null);
     setLoot(null);
-    setMonsterPortrait(null);
     setPhase("choose");
 
-    // Generate portrait asynchronously
-    setPortraitLoading(true);
-    generateMonsterPortrait(monsterData.name, monsterData.description, biomeName)
-      .then((url) => {
-        setMonsterPortrait(url);
-        setPortraitLoading(false);
-      })
-      .catch(() => setPortraitLoading(false));
+    if (preloadedPortrait) {
+      // Use pre-generated portrait from zone map
+      setMonsterPortrait(preloadedPortrait);
+      setPortraitLoading(false);
+    } else {
+      // Generate portrait asynchronously (fallback)
+      setMonsterPortrait(null);
+      setPortraitLoading(true);
+      generateMonsterPortrait(monsterData.name, monsterData.description, biomeName)
+        .then((url) => {
+          setMonsterPortrait(url);
+          setPortraitLoading(false);
+        })
+        .catch(() => setPortraitLoading(false));
+    }
   }, []);
 
   const executeAction = useCallback(async (action, playerStats, location) => {

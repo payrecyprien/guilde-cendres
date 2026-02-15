@@ -38,5 +38,18 @@ export default function useDialogue() {
     setStepIndex(newIndex);
   }, []);
 
-  return { steps, stepIndex, currentStep, isOpen, open, close, advance, replaceSteps };
+  // Update a single step in-place (for async AI greeting replacement)
+  const updateStep = useCallback((index, newStep) => {
+    setSteps((prev) => {
+      if (index < 0 || index >= prev.length) return prev;
+      const copy = [...prev];
+      copy[index] = newStep;
+      return copy;
+    });
+  }, []);
+
+  // Get a step by index (for preserving AI-replaced greetings)
+  const getStep = useCallback((index) => steps[index] || null, [steps]);
+
+  return { steps, stepIndex, currentStep, isOpen, open, close, advance, replaceSteps, updateStep, getStep };
 }

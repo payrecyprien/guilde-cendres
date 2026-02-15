@@ -9,6 +9,7 @@ export default function QuestScene({
   highlightedMonster,
   playerPos,
   objectiveUnlocked,
+  monsterPortraits,
 }) {
   if (!zoneData || !zoneBiome) return null;
 
@@ -44,6 +45,7 @@ export default function QuestScene({
           key={`m${i}`}
           monster={m}
           isHighlighted={highlightedMonster?.x === m.x && highlightedMonster?.y === m.y}
+          portraitUrl={monsterPortraits?.[m.name] || null}
         />
       ))}
 
