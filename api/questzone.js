@@ -32,7 +32,7 @@ Difficulté : ${quest.difficulty}/5
 - Le sol (0) doit être la majorité des tiles intérieures
 
 ## MONSTRES
-- Génère 2-3 monstres adaptés au lieu et à la quête
+- Génère TOUJOURS entre 2 et 3 monstres, quel que soit le type de quête
 - Chaque monstre a une position (x, y) sur une case de sol (0)
 - Les monstres ne doivent PAS être sur l'entrée, l'objectif, ou un mur
 - Nomme-les de façon originale (pas de "loup géant" ou "squelette" générique)
@@ -172,6 +172,29 @@ export default async function handler(req, res) {
         const tile = zone.grid[m.y]?.[m.x];
         return tile === 0 && m.x > 0 && m.x < 13 && m.y > 0 && m.y < 9;
       });
+    }
+
+    // Fallback: ensure at least 2 monsters
+    if (!zone.monsters || zone.monsters.length < 2) {
+      const fallbackMonsters = [];
+      for (let y = 2; y < 8 && fallbackMonsters.length < 2; y++) {
+        for (let x = 2; x < 12 && fallbackMonsters.length < 2; x++) {
+          if (zone.grid[y][x] === 0) {
+            const existing = (zone.monsters || []).some((m) => m.x === x && m.y === y);
+            if (!existing) {
+              fallbackMonsters.push({
+                name: fallbackMonsters.length === 0 ? "Rôdeur des ombres" : "Charognard",
+                x, y, hp: 25 + Math.floor(Math.random() * 15),
+                atk: 4 + Math.floor(Math.random() * 3),
+                def: 1 + Math.floor(Math.random() * 2),
+                xp: 10, gold: 8,
+                description: "Une créature hostile rôde dans la zone.",
+              });
+            }
+          }
+        }
+      }
+      zone.monsters = [...(zone.monsters || []), ...fallbackMonsters];
     }
 
     return res.status(200).json(zone);

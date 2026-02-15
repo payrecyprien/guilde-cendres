@@ -18,6 +18,7 @@ Génère UN contrat de mercenaire. Le contrat doit être court, original, et li�
 - Adapte la difficulté au niveau du joueur
 - Chaque quête a un objectif clair et un twist ou un dilemme moral
 - Varie les types : extermination, escorte, investigation, récupération, infiltration
+- TOUTES les quêtes contiennent des ennemis à combattre, même les quêtes d'investigation ou d'escorte
 - NE PAS répéter une quête déjà faite (voir historique)
 - Le contrat doit pouvoir se résoudre dans une seule zone
 
