@@ -1,16 +1,16 @@
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 
 const BIOMES = {
-  brumesombre: { name: "Brumesombre Forest", floor: "grass", walls: "trees", obstacle: "thick bushes" },
-  ruines_nord: { name: "Northern Ruins", floor: "cracked tiles", walls: "collapsed walls", obstacle: "rubble" },
+  gloomhaze: { name: "Gloomhaze Forest", floor: "grass", walls: "trees", obstacle: "thick bushes" },
+  northern_ruins: { name: "Northern Ruins", floor: "cracked tiles", walls: "collapsed walls", obstacle: "rubble" },
   mine: { name: "Abandoned Mine", floor: "rock", walls: "rock walls", obstacle: "cave-ins" },
-  marais: { name: "Valtorve Marshes", floor: "muddy ground", walls: "deep water", obstacle: "reeds" },
-  route_commerce: { name: "Trade Road", floor: "dirt path", walls: "boulders", obstacle: "broken carts" },
-  village_est: { name: "Eastern Village", floor: "cobblestone", walls: "buildings", obstacle: "overturned stalls" },
+  marshes: { name: "Grimfen Marshes", floor: "muddy ground", walls: "deep water", obstacle: "reeds" },
+  trade_road: { name: "Trade Road", floor: "dirt path", walls: "boulders", obstacle: "broken carts" },
+  east_village: { name: "Eastern Village", floor: "cobblestone", walls: "buildings", obstacle: "overturned stalls" },
 };
 
 function buildPrompt(quest) {
-  const biome = BIOMES[quest.location] || BIOMES.brumesombre;
+  const biome = BIOMES[quest.location] || BIOMES.gloomhaze;
 
   return `You are an RPG level designer. You generate exploration zones for a tile-based game.
 

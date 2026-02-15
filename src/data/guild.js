@@ -32,7 +32,7 @@ export const NPCS = [
     x: 11,
     y: 2,
     type: "armor",
-    name: "Forge-Marteau",
+    name: "Ironhammer",
     title: "Armorer",
     colors: { body: "#705030", head: "#d4a870", accent: "#8b6914", icon: "🔨" },
   },
@@ -43,17 +43,17 @@ export const DIALOGUES = {
   quest: [
     { speaker: "Commander Varek", text: "Welcome to the Ash Guild, mercenary. We always need blades around here." },
     { speaker: "Commander Varek", text: "I've got contracts on the board. Exterminations, escorts, retrievals... Take your pick." },
-    { speaker: "Commander Varek", text: "Brumesombre Forest has been trouble lately. Creatures prowling too close to the village. Interested?" },
-    { speaker: "Commander Varek", text: "Gear up at Forge-Marteau's before heading out. A dead mercenary earns the guild nothing." },
+    { speaker: "Commander Varek", text: "Gloomhaze Forest has been trouble lately. Creatures prowling too close to the village. Interested?" },
+    { speaker: "Commander Varek", text: "Gear up at Ironhammer's before heading out. A dead mercenary earns the guild nothing." },
   ],
   armor: [
-    { speaker: "Forge-Marteau", text: "*strikes the anvil* ... Hm? You need equipment?" },
-    { speaker: "Forge-Marteau", text: "Bring me components from your missions. Fangs, scales, ores... I can work with those." },
-    { speaker: "Forge-Marteau", text: "I've got a short sword and a wooden shield in stock. Nothing fancy, but they get the job done." },
-    { speaker: "Forge-Marteau", text: "Come back when you've got interesting materials. Then I can forge the real stuff." },
+    { speaker: "Ironhammer", text: "*strikes the anvil* ... Hm? You need equipment?" },
+    { speaker: "Ironhammer", text: "Bring me components from your missions. Fangs, scales, ores... I can work with those." },
+    { speaker: "Ironhammer", text: "I've got a short sword and a wooden shield in stock. Nothing fancy, but they get the job done." },
+    { speaker: "Ironhammer", text: "Come back when you've got interesting materials. Then I can forge the real stuff." },
   ],
   door: [
-    { speaker: "Guild Door", text: "The door leads to the lands of Cendrebourg. Accept a contract from Commander Varek first." },
+    { speaker: "Guild Door", text: "The door leads to the lands of Ashburg. Accept a contract from Commander Varek first." },
   ],
   chest: [
     { speaker: "Guild Chest", text: "The guild's common chest. Empty for now — bring back loot from your missions." },

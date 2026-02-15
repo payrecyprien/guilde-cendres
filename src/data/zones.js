@@ -12,8 +12,8 @@ export const ZONE_WALKABLE = new Set([ZT.FLOOR, ZT.ENTRY, ZT.OBJECTIVE]);
 
 // ─── BIOME PALETTES ───
 export const BIOME_STYLES = {
-  brumesombre: {
-    name: "Brumesombre Forest",
+  gloomhaze: {
+    name: "Gloomhaze Forest",
     floor1: "#2a3520", floor2: "#283218",
     wall: "#1a2810", wallDetail: "#3a5025",
     obstacle: "#354a28", obstacleIcon: "🌿",
@@ -24,7 +24,7 @@ export const BIOME_STYLES = {
     visionRadius: 3.5,
     visionColor: "rgba(8, 15, 5, 0.97)",
   },
-  ruines_nord: {
+  northern_ruins: {
     name: "Northern Ruins",
     floor1: "#2e2a28", floor2: "#322e2a",
     wall: "#1c1a18", wallDetail: "#4a4540",
@@ -46,8 +46,8 @@ export const BIOME_STYLES = {
     visionRadius: 2.5,
     visionColor: "rgba(5, 4, 2, 0.98)",
   },
-  marais: {
-    name: "Valtorve Marshes",
+  marshes: {
+    name: "Grimfen Marshes",
     floor1: "#282e22", floor2: "#2a3024",
     wall: "#1a2018", wallDetail: "#3a4a30",
     obstacle: "#303828", obstacleIcon: "🌾",
@@ -58,7 +58,7 @@ export const BIOME_STYLES = {
     visionRadius: 4,
     visionColor: "rgba(10, 15, 8, 0.95)",
   },
-  route_commerce: {
+  trade_road: {
     name: "Trade Road",
     floor1: "#302a22", floor2: "#342e24",
     wall: "#1c1810", wallDetail: "#5a4a35",
@@ -68,7 +68,7 @@ export const BIOME_STYLES = {
     fog: "rgba(100, 80, 50, 0.03)",
     limitedVision: false,
   },
-  village_est: {
+  east_village: {
     name: "Eastern Village",
     floor1: "#2e2820", floor2: "#322c24",
     wall: "#1a1510", wallDetail: "#4a3d2e",
@@ -81,5 +81,5 @@ export const BIOME_STYLES = {
 };
 
 export function getBiomeStyle(locationId) {
-  return BIOME_STYLES[locationId] || BIOME_STYLES.brumesombre;
+  return BIOME_STYLES[locationId] || BIOME_STYLES.gloomhaze;
 }

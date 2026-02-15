@@ -133,7 +133,7 @@ export default function App() {
 
     if (available.length === 0) {
       dialogue.open([{
-        type: "text", speaker: "Forge-Marteau",
+        type: "text", speaker: "Ironhammer",
         text: "*looks at empty stock* You already have everything. Come back when I have new gear.",
       }]);
       return;
@@ -147,8 +147,8 @@ export default function App() {
     choices.push({ label: "Nothing for now", action: "leave_shop", style: "choice-decline" });
 
     dialogue.open([
-      { type: "text", speaker: "Forge-Marteau", text: "*strikes the anvil* What do you need?" },
-      { type: "choice", speaker: "Forge-Marteau", text: `You have ${player.gold} gold.`, choices },
+      { type: "text", speaker: "Ironhammer", text: "*strikes the anvil* What do you need?" },
+      { type: "choice", speaker: "Ironhammer", text: `You have ${player.gold} gold.`, choices },
     ]);
   }, [player, dialogue]);
 
@@ -350,7 +350,7 @@ export default function App() {
       if (!item || player.gold < item.cost) {
         dialogue.close();
         dialogue.open([{
-          type: "text", speaker: "Forge-Marteau",
+          type: "text", speaker: "Ironhammer",
           text: "You don't have enough gold. Come back after a mission.",
         }]);
         return;
@@ -366,7 +366,7 @@ export default function App() {
       dialogue.close();
       const st = item.stat === "hp" ? `+${item.bonus} PV` : `+${item.bonus} ${item.stat.toUpperCase()}`;
       dialogue.open([{
-        type: "text", speaker: "Forge-Marteau", text: `*hands over ${item.name}* ${st}. Use it well.`,
+        type: "text", speaker: "Ironhammer", text: `*hands over ${item.name}* ${st}. Use it well.`,
       }]);
       return;
     }
@@ -546,7 +546,7 @@ export default function App() {
             : (zoneBiome?.name || "QUEST ZONE").toUpperCase()}
         </div>
         <div className="game-subtitle">
-          {scene === SCENE.GUILD ? "Mercenaries of Cendrebourg"
+          {scene === SCENE.GUILD ? "Mercenaries of Ashburg"
             : scene === SCENE.COMBAT ? combat.monster?.name || "Combat"
             : activeQuest?.title || "Exploration"}
         </div>
