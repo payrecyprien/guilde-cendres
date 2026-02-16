@@ -6,6 +6,16 @@ Factions: Ashburg Guard, Grey Blades (mercenaries), Obsidian Circle (occult), Cr
 Dangerous locations: Gloomhaze Forest (disappearances), Northern Ruins (avoided by all), Abandoned Mine, Grimfen Marshes.
 Threats: creatures roam the wilds, occult rituals are taking place, a necromancer is rumored to be active.`;
 
+// Shared writing style constraint injected into every narrative prompt
+const STYLE = `
+## WRITING STYLE (mandatory)
+- NEVER use em-dashes (—), semicolons, or ellipsis (...) except in dialogue trailing off
+- NEVER use "a testament to", "dance of", "symphony of", "tapestry of", "the very", "mere", "whilst", "yet"
+- NEVER start sentences with "As", "With", "Having", "In a", "The air", "A sense of"
+- Avoid purple prose: no "sends shivers", "echoes through", "piercing gaze", "looming shadow", "etched with"
+- Use short, punchy sentences. Fragments are fine. Write like a terse novelist, not a chatbot.
+- Prefer active voice. Prefer concrete verbs over abstract ones. "The blade cuts" not "the blade dances"`;
+
 // ─── QUEST GENERATION ───
 export const QUEST_SYSTEM_PROMPT = `${WORLD}
 
@@ -21,6 +31,7 @@ Generate ONE mercenary contract. The contract must be short, original, and tied 
 - ALL quests contain enemies to fight, even investigation or escort quests
 - DO NOT repeat a previously completed quest (see history)
 - The contract must be resolvable within a single zone
+${STYLE}
 
 ## FORMAT (strict JSON, nothing else)
 {
@@ -60,6 +71,7 @@ Narrate combat exchanges with intensity and variety. Describe both the player's 
 - If the player defends, describe the defensive stance and damage reduction
 - If the player flees, describe the attempt (successful or not)
 - Add visceral and atmospheric details
+${STYLE}
 
 ## FORMAT (strict JSON, nothing else)
 {
@@ -97,6 +109,7 @@ Create a unique piece of equipment from the given ingredients. The item should f
 - stat must be either "atk" or "def"
 - bonus is between 1 and 6, proportional to ingredient tier (T1 ingredients = 1-3 bonus, T2 = 3-6)
 - Higher tier ingredients = better results
+${STYLE}
 
 ## FORMAT (strict JSON, nothing else)
 {
@@ -113,8 +126,8 @@ export function buildCraftUserMessage(ingredients) {
 
 // ─── NPC CONTEXTUAL DIALOGUE ───
 export const VAREK_DIALOGUE_PROMPT = `You are Commander Varek, leader of the Ash Guild in Ashburg. You are direct, pragmatic, occasionally sarcastic, and address the mercenary informally. You speak like a battle-hardened veteran.
-
-Write a SINGLE short greeting (1-2 sentences max). No quotes around it. Be varied and natural — never repeat yourself.`;
+${STYLE}
+Write a SINGLE short greeting (1-2 sentences max). No quotes around it. Be varied and natural.`;
 
 export function buildVarekDialogueMessage(context) {
   const parts = [`Mercenary is level ${context.level}, HP ${context.hp}/${context.maxHp}, ${context.gold} gold.`];
@@ -128,7 +141,7 @@ export function buildVarekDialogueMessage(context) {
 }
 
 export const IRONHAMMER_DIALOGUE_PROMPT = `You are Ironhammer, the armorer of the Ash Guild in Ashburg. You are gruff, laconic, and communicate partly through actions (written with *asterisks*). You care about your craft above all else.
-
+${STYLE}
 Write a SINGLE short greeting (1-2 sentences max). No quotes around it. Be varied and natural.`;
 
 export function buildIronhammerDialogueMessage(context) {

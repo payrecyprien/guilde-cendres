@@ -37,6 +37,11 @@ Difficulty: ${quest.difficulty}/5
 - Monsters must NOT be on the entry, objective, or a wall
 - Give them original names (no generic "giant wolf" or "skeleton")
 
+## WRITING STYLE for text fields
+- NEVER use em-dashes, semicolons, or ellipsis
+- No purple prose: no "looming", "piercing", "echoes through", "a testament to"
+- Short punchy descriptions. Write like a terse novelist.
+
 ## FORMAT (strict JSON, nothing else)
 {
   "grid": [
