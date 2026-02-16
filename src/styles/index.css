@@ -1745,3 +1745,132 @@ body {
   font-style: italic;
   padding: 8px;
 }
+
+/* Playground tab highlight */
+.dp-tab-play { color: #d4a856 !important; }
+.dp-tab-play.dp-tab-active { border-bottom-color: #d4a856; }
+
+/* Playground layout */
+.dp-playground {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dp-pg-controls {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  padding: 8px 10px;
+  background: #151210;
+  border-radius: 4px;
+  flex-wrap: wrap;
+}
+
+.dp-pg-control-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dp-pg-label {
+  font-size: 10px;
+  color: #5a4a35;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  min-width: 80px;
+}
+
+.dp-pg-select {
+  background: #0a0908;
+  border: 1px solid #2a2318;
+  color: #a89880;
+  padding: 4px 8px;
+  border-radius: 3px;
+  font-family: inherit;
+  font-size: 11px;
+}
+
+.dp-pg-slider {
+  width: 120px;
+  accent-color: #d4a856;
+}
+
+.dp-pg-temp-val {
+  font-size: 12px;
+  color: #d4a856;
+  font-weight: 700;
+  min-width: 35px;
+  text-align: center;
+}
+
+.dp-pg-textarea {
+  width: 100%;
+  background: #0a0908;
+  border: 1px solid #2a2318;
+  color: #a89880;
+  padding: 8px;
+  border-radius: 4px;
+  font-family: "Courier New", monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  resize: vertical;
+  box-sizing: border-box;
+}
+.dp-pg-textarea:focus {
+  outline: none;
+  border-color: #d4a856;
+}
+
+.dp-pg-run {
+  align-self: flex-start;
+  background: linear-gradient(180deg, #2a4a1a, #1a3a10);
+  border: 1px solid #3a5a2a;
+  color: #8fc06a;
+  padding: 8px 20px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  transition: all 0.2s;
+}
+.dp-pg-run:hover { border-color: #6a9f4a; color: #a0d080; }
+.dp-pg-running {
+  background: linear-gradient(180deg, #3a3018, #2a2010) !important;
+  border-color: #5a4a25 !important;
+  color: #d4a856 !important;
+  cursor: wait !important;
+}
+
+/* A/B Comparison */
+.dp-pg-compare {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.dp-pg-compare-col {
+  flex: 1;
+  min-width: 0;
+}
+
+.dp-pg-compare-label {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #5a4a35;
+  margin-bottom: 4px;
+  padding: 3px 6px;
+  background: #151210;
+  border-radius: 3px;
+  display: inline-block;
+}
+
+.dp-pg-compare-new { color: #6a9f4a; }
+
+.dp-pg-compare-code {
+  max-height: 200px;
+  font-size: 10px;
+}

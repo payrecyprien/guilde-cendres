@@ -141,7 +141,7 @@ export default async function handler(req, res) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return res.status(500).json({ error: "API key not configured" });
 
-  const { quest } = req.body;
+  const { quest, temperature: clientTemp } = req.body;
   if (!quest) return res.status(400).json({ error: "Missing quest" });
 
   try {
@@ -155,7 +155,7 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         model: "claude-sonnet-4-5-20250929",
         max_tokens: 1200,
-        temperature: 0.85,
+        temperature: clientTemp ?? 0.85,
         system: buildPrompt(quest),
         messages: [{ role: "user", content: "Generate the exploration zone." }],
       }),

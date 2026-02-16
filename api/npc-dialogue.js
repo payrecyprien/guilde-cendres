@@ -11,7 +11,7 @@ export default async function handler(req, res) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return res.status(500).json({ error: "API key not configured" });
 
-  const { system, message } = req.body;
+  const { system, message, temperature: clientTemp } = req.body;
 
   try {
     const response = await fetch(ANTHROPIC_URL, {
@@ -24,7 +24,7 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         model: "claude-haiku-4-5-20251001",
         max_tokens: 150,
-        temperature: 0.9,
+        temperature: clientTemp ?? 0.9,
         system,
         messages: [{ role: "user", content: message }],
       }),

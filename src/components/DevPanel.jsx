@@ -1,22 +1,78 @@
 import { useState, useEffect, useRef } from "react";
 import aiLogger from "../utils/aiLogger";
 
+const MODEL_MAP = {
+  "claude-sonnet-4-5": "claude-sonnet-4-5-20250929",
+  "claude-haiku-4-5": "claude-haiku-4-5-20251001",
+};
+
 export default function DevPanel({ onClose }) {
   const [logs, setLogs] = useState(aiLogger.getLogs());
   const [expandedId, setExpandedId] = useState(null);
-  const [tab, setTab] = useState("prompt"); // prompt | response | validation
+  const [tab, setTab] = useState("prompt");
   const scrollRef = useRef(null);
+
+  // Playground state
+  const [pgSystem, setPgSystem] = useState("");
+  const [pgUser, setPgUser] = useState("");
+  const [pgTemp, setPgTemp] = useState(0.9);
+  const [pgModel, setPgModel] = useState("claude-haiku-4-5");
+  const [pgRunning, setPgRunning] = useState(false);
+  const [pgResult, setPgResult] = useState(null);
+  const [pgDuration, setPgDuration] = useState(null);
 
   useEffect(() => {
     return aiLogger.subscribe(setLogs);
   }, []);
 
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [logs.length]);
 
+  const selected = logs.find((l) => l.id === expandedId);
+
+  // Load selected log into playground
+  const loadIntoPlayground = () => {
+    if (!selected) return;
+    setPgSystem(selected.systemPrompt || "");
+    setPgUser(selected.userMessage || "");
+    setPgModel(selected.model || "claude-haiku-4-5");
+    setPgResult(null);
+    setPgDuration(null);
+    setTab("playground");
+  };
+
+  // Run playground call
+  const runPlayground = async () => {
+    setPgRunning(true);
+    setPgResult(null);
+    const t0 = performance.now();
+
+    try {
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: MODEL_MAP[pgModel] || MODEL_MAP["claude-haiku-4-5"],
+          max_tokens: 600,
+          temperature: pgTemp,
+          system: pgSystem,
+          messages: [{ role: "user", content: pgUser }],
+        }),
+      });
+
+      const data = await response.json();
+      const text = data.content?.map((b) => b.text || "").join("") || "(empty)";
+      setPgDuration(Math.round(performance.now() - t0));
+      setPgResult(text);
+    } catch (err) {
+      setPgDuration(Math.round(performance.now() - t0));
+      setPgResult(`Error: ${err.message}`);
+    }
+    setPgRunning(false);
+  };
+
+  // Stats
   const totalCalls = logs.length;
   const successCount = logs.filter((l) => l.status === "success").length;
   const errorCount = logs.filter((l) => l.status === "error").length;
@@ -28,8 +84,6 @@ export default function DevPanel({ onClose }) {
     : 0;
   const totalTokensIn = logs.reduce((a, l) => a + (l.tokensEstimate?.input || 0), 0);
   const totalTokensOut = logs.reduce((a, l) => a + (l.tokensEstimate?.output || 0), 0);
-
-  const selected = logs.find((l) => l.id === expandedId);
 
   return (
     <div className="devpanel-overlay" onClick={onClose}>
@@ -90,7 +144,7 @@ export default function DevPanel({ onClose }) {
               <div
                 key={log.id}
                 className={`dp-entry ${log.id === expandedId ? "dp-entry-active" : ""} dp-entry-${log.status}`}
-                onClick={() => setExpandedId(log.id === expandedId ? null : log.id)}
+                onClick={() => { setExpandedId(log.id === expandedId ? null : log.id); setTab("prompt"); }}
               >
                 <div className="dp-entry-top">
                   <span className={`dp-badge dp-badge-${log.status}`}>
@@ -140,9 +194,13 @@ export default function DevPanel({ onClose }) {
                   <button className={`dp-tab ${tab === "validation" ? "dp-tab-active" : ""}`} onClick={() => setTab("validation")}>
                     Validation
                   </button>
+                  <button className={`dp-tab dp-tab-play ${tab === "playground" ? "dp-tab-active" : ""}`} onClick={loadIntoPlayground}>
+                    🎛️ Playground
+                  </button>
                 </div>
 
                 <div className="dp-detail-content">
+                  {/* === PROMPT TAB === */}
                   {tab === "prompt" && (
                     <>
                       <div className="dp-section-label">System Prompt</div>
@@ -151,12 +209,16 @@ export default function DevPanel({ onClose }) {
                       <pre className="dp-code">{selected.userMessage || "(none)"}</pre>
                     </>
                   )}
+
+                  {/* === RESPONSE TAB === */}
                   {tab === "response" && (
                     <>
                       <div className="dp-section-label">Raw Response</div>
                       <pre className="dp-code">{selected.rawResponse || "(no response)"}</pre>
                     </>
                   )}
+
+                  {/* === VALIDATION TAB === */}
                   {tab === "validation" && selected.validationResult && (
                     <>
                       <div className={`dp-validation-summary ${selected.validationResult.valid ? "dp-vs-ok" : "dp-vs-warn"}`}>
@@ -185,6 +247,80 @@ export default function DevPanel({ onClose }) {
                   )}
                   {tab === "validation" && !selected.validationResult && (
                     <div className="dp-detail-empty">No validation data (call pending or failed)</div>
+                  )}
+
+                  {/* === PLAYGROUND TAB === */}
+                  {tab === "playground" && (
+                    <div className="dp-playground">
+                      <div className="dp-pg-controls">
+                        <div className="dp-pg-control-row">
+                          <label className="dp-pg-label">Model</label>
+                          <select
+                            className="dp-pg-select"
+                            value={pgModel}
+                            onChange={(e) => setPgModel(e.target.value)}
+                          >
+                            <option value="claude-sonnet-4-5">Sonnet 4.5 (quality)</option>
+                            <option value="claude-haiku-4-5">Haiku 4.5 (speed)</option>
+                          </select>
+                        </div>
+                        <div className="dp-pg-control-row">
+                          <label className="dp-pg-label">Temperature</label>
+                          <input
+                            className="dp-pg-slider"
+                            type="range"
+                            min="0"
+                            max="1"
+                            step="0.05"
+                            value={pgTemp}
+                            onChange={(e) => setPgTemp(parseFloat(e.target.value))}
+                          />
+                          <span className="dp-pg-temp-val">{pgTemp.toFixed(2)}</span>
+                        </div>
+                      </div>
+
+                      <div className="dp-section-label">System Prompt (editable)</div>
+                      <textarea
+                        className="dp-pg-textarea"
+                        value={pgSystem}
+                        onChange={(e) => setPgSystem(e.target.value)}
+                        rows={6}
+                      />
+
+                      <div className="dp-section-label">User Message (editable)</div>
+                      <textarea
+                        className="dp-pg-textarea"
+                        value={pgUser}
+                        onChange={(e) => setPgUser(e.target.value)}
+                        rows={3}
+                      />
+
+                      <button
+                        className={`dp-pg-run ${pgRunning ? "dp-pg-running" : ""}`}
+                        onClick={runPlayground}
+                        disabled={pgRunning}
+                      >
+                        {pgRunning ? "⏳ Running..." : "▶ Run Prompt"}
+                      </button>
+
+                      {/* A/B Comparison */}
+                      {(pgResult || selected.rawResponse) && (
+                        <div className="dp-pg-compare">
+                          <div className="dp-pg-compare-col">
+                            <div className="dp-pg-compare-label">Original ({selected.duration}ms)</div>
+                            <pre className="dp-code dp-pg-compare-code">{selected.rawResponse || "(none)"}</pre>
+                          </div>
+                          <div className="dp-pg-compare-col">
+                            <div className="dp-pg-compare-label dp-pg-compare-new">
+                              Playground {pgDuration ? `(${pgDuration}ms)` : ""}
+                            </div>
+                            <pre className="dp-code dp-pg-compare-code">
+                              {pgResult || "(click Run to generate)"}
+                            </pre>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
               </>
