@@ -23,6 +23,7 @@ import CombatScene from "./scenes/CombatScene";
 import PlayerSprite from "./components/PlayerSprite";
 import DialogueBox from "./components/DialogueBox";
 import JournalPanel from "./components/JournalPanel";
+import DevPanel from "./components/DevPanel";
 import HUD from "./components/HUD";
 
 const GUILD_W = GUILD_MAP[0].length;
@@ -40,6 +41,7 @@ export default function App() {
   const [questHistory, setQuestHistory] = useState([]);
   const [pendingQuest, setPendingQuest] = useState(null);
   const [journalOpen, setJournalOpen] = useState(false);
+  const [devPanelOpen, setDevPanelOpen] = useState(false);
   const [lastQuestResult, setLastQuestResult] = useState(null); // tracks return context
 
   const [zoneData, setZoneData] = useState(null);
@@ -599,6 +601,14 @@ export default function App() {
 
   // This runs every render, updating the ref with latest closure
   keyboardRef.current = (e) => {
+    // ─── DEV PANEL TOGGLE ───
+    if (e.key === "F2") {
+      e.preventDefault();
+      setDevPanelOpen((prev) => !prev);
+      return;
+    }
+    if (devPanelOpen) return; // block all other keys when dev panel is open
+
     // ─── TITLE SCREEN ───
     if (scene === SCENE.TITLE) {
       if (INTERACT_KEYS.has(e.key)) {
@@ -817,6 +827,8 @@ export default function App() {
           <HUD player={player} activeQuest={activeQuest} />
         </>
       )}
+
+      {devPanelOpen && <DevPanel onClose={() => setDevPanelOpen(false)} />}
     </div>
   );
 }

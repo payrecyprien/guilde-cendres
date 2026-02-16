@@ -57,6 +57,7 @@ export default function HUD({ player, activeQuest }) {
         <span><b>WASD</b> move</span>
         <span><b>E</b> interact</span>
         <span><b>J</b> journal</span>
+        <span><b>F2</b> dev panel</span>
       </div>
     </div>
   );
