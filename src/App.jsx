@@ -602,7 +602,7 @@ export default function App() {
   // This runs every render, updating the ref with latest closure
   keyboardRef.current = (e) => {
     // ─── DEV PANEL TOGGLE ───
-    if (e.key === "F2") {
+    if (e.key === "t" || e.key === "T") {
       e.preventDefault();
       setDevPanelOpen((prev) => !prev);
       return;

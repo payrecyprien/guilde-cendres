@@ -40,7 +40,7 @@ export default function DevPanel({ onClose }) {
             <span className="devpanel-icon">🔬</span>
             AI Prompt Observatory
           </div>
-          <div className="devpanel-close" onClick={onClose}>[F2] close</div>
+          <div className="devpanel-close" onClick={onClose}>[T] close</div>
         </div>
 
         {/* Stats bar */}
